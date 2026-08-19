@@ -73,11 +73,11 @@ La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del regist
 | [ADR-0006](adrs/0006-momento-del-consumo-de-inventario.md) | El inventario se descuenta al preparar | Aceptado, **refinado por 0016 y extendido por 0026** |
 | [ADR-0007](adrs/0007-concurrencia-sobre-lotes-fifo.md) | Bloqueo pesimista sobre lotes FIFO | Aceptado, **completado por 0030** |
 | [ADR-0008](adrs/0008-transporte-de-tiempo-real.md) | Server-Sent Events para actualizaciones en vivo | Aceptado |
-| [ADR-0009](adrs/0009-durabilidad-de-la-cola-de-eventos.md) | Registro de eventos persistido en PostgreSQL | Aceptado |
+| [ADR-0009](adrs/0009-durabilidad-de-la-cola-de-eventos.md) | Registro de eventos persistido en PostgreSQL | Aceptado, **precisado por 0035** |
 | [ADR-0010](adrs/0010-contrato-de-api.md) | tRPC como contrato entre backend y SPA | Aceptado |
 | [ADR-0011](adrs/0011-representacion-de-importes.md) | Los importes son enteros en unidad mínima | Aceptado, **completado por 0032** |
 | [ADR-0012](adrs/0012-concurrencia-sobre-la-mesa.md) | Mesa con mesero asignado y bloqueo suave | **Reemplazado por ADR-0017** |
-| [ADR-0013](adrs/0013-estado-del-dominio-en-el-cliente.md) | El servidor es la única fuente de verdad | Aceptado |
+| [ADR-0013](adrs/0013-estado-del-dominio-en-el-cliente.md) | El servidor es la única fuente de verdad | Aceptado, **propagado al registro de eventos por 0035** |
 | [ADR-0014](adrs/0014-sesion-en-estacion-compartida.md) | Sesión corta con cierre automático | Aceptado, **precisado por 0020, completado por 0031** |
 | [ADR-0015](adrs/0015-sin-escritura-sin-conexion.md) | Las estaciones no escriben sin conexión | Aceptado |
 | [ADR-0016](adrs/0016-identidad-en-cocina.md) | Cocina: sin identidad de usuario, con autoridad sobre el servicio | Aceptado, **enmendado por 0018, 0019, 0031 y el PRD v1.5** |
@@ -95,8 +95,12 @@ La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del regist
 | [ADR-0028](adrs/0028-dia-operativo.md) | El día operativo arranca a las 05:00 y es la única unidad de día | Aceptado |
 | [ADR-0029](adrs/0029-el-combo-se-descompone-al-enviarse.md) | El combo se descompone al enviarse y no existe como fila de dominio | Aceptado |
 | [ADR-0030](adrs/0030-clave-de-ordenamiento-fifo.md) | El consumo FIFO se ordena por número de lote, no por fecha de compra | Aceptado |
-| [ADR-0031](adrs/0031-politica-de-acceso.md) | Tres capas de acceso: dispositivo, persona y llave de servicio | Aceptado |
+| [ADR-0031](adrs/0031-politica-de-acceso.md) | Tres capas de acceso: dispositivo, persona y llave de servicio | Aceptado, **completado por 0033, 0034, 0035 y 0036** |
 | [ADR-0032](adrs/0032-regla-de-redondeo.md) | La regla de redondeo y su punto de aplicación | Aceptado, **completa 0011** |
+| [ADR-0033](adrs/0033-transporte-cifrado-y-atributos-de-sesion.md) | TLS con CA propia del local, y los atributos de sesión que habilita | Aceptado, **completa 0031** |
+| [ADR-0034](adrs/0034-el-dispositivo-es-precondicion-del-pin.md) | El dispositivo es precondición del PIN, no de la contraseña | Aceptado, **completa 0031** |
+| [ADR-0035](adrs/0035-el-evento-es-una-senal-y-el-stream-se-filtra-por-rol.md) | El evento es una señal de invalidación, y el stream se filtra por rol | Aceptado, **completa 0031, propaga 0013, precisa 0009** |
+| [ADR-0036](adrs/0036-el-hash-de-cada-secreto-lo-decide-su-entropia.md) | El hash de cada secreto lo decide su entropía, y el token tiene ciclo de vida | Aceptado, **completa 0031** |
 
 ## Modelo de datos
 
@@ -122,13 +126,28 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   en `CredencialCocina` (ADR-0018). **`/admin` va con usuario y contraseña**, no con PIN: hasheada con KDF de
   memoria dura y sesión de 60 min de inactividad (ADR-0031). Una
   `Persona` de rol `cocina` existe para costos y horarios, no para entrar al sistema.
+  El `pin_hash` y la contraseña son secretos de **baja entropía**, así que los dos van con **Argon2id y
+  sal única por credencial** (ADR-0036). Un KDF **no vuelve seguro** un PIN de 4 dígitos contra un volcado
+  —10⁴ es forzable igual—: rompe la **precomputación masiva**, que es lo que convertía un volcado en todos
+  los PINs a la vez. El problema de fondo es del PIN corto y **ADR-0014 ya lo aceptó** con razones físicas.
+  La sal por credencial tiene un costo concreto: **no se puede buscar por hash**, así que la regla *"dos
+  personas no pueden compartir PIN"* deja de ser un índice único y pasa a ser una comprobación explícita
+  contra cada PIN activo al dar de alta.
 - **`Dispositivo`** — nombre, rol (`estacion` | `kds` | `cocina`), `token_hash`, `enrolado_en`,
-  `revocado_en`. Es la **primera capa de acceso** (ADR-0031): autoriza leer el stream SSE y presentarse como
+  **`expira_en`**, `revocado_en`. Es la **primera capa de acceso** (ADR-0031): autoriza leer el stream SSE y presentarse como
   esa ruta, y **ninguna acción**. Se enrola desde `/admin`, el token se muestra una sola vez y viaja en
   cookie `httpOnly` — que es lo que `EventSource` sabe enviar sin headers.
+  El **valor es de ≥ 128 bits de un CSPRNG** y su hash es **SHA-256 con sal**, no un KDF (ADR-0036): se
+  verifica en cada request del stream con 5 pantallas conectadas todo el servicio, y un KDF ahí sería una
+  denegación de servicio contra uno mismo. **La elección del hash rápido vale solo bajo esa premisa de
+  entropía**: acortar el token rompe la decisión sin que nada falle ni avise.
+  `expira_en` son **90 días con renovación automática mientras el dispositivo se use**, así que una
+  pantalla en uso nunca vence y un **equipo perdido y apagado caduca solo**. Se puede **rotar el token sin
+  re-enrolar** el equipo, que es la salida para la sospecha sin certeza.
 - **`CredencialCocina`** — `pin_hash` de **6 dígitos** (ADR-0031), `actualizada_en`, `actualizada_por`. Llave del ciclo del servicio,
   no identidad: se verifica al abrir y cerrar, **nunca** en el marcado (ADR-0018). Entidad propia y no un
   campo de configuración porque es un secreto: no se muestra y se rota por otro motivo.
+  Como todo secreto de **baja entropía**, va con **Argon2id y sal única por credencial** (ADR-0036).
 - **`Turno`** — **mesero**, estación de apertura, `abierto_en`, `origen_apertura`
   (`marcado` | `primer_login`), `cerrado_en`, `cerrado_por` (`mesero` | `administrador`),
   `cerrado_en_propuesto`, `motivo_cierre_tardio`.
@@ -141,9 +160,16 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   **Solo del mesero:** cocina no ficha, así que no hay turno de cocina.
 - **`HorarioProgramado`** — persona, fecha, hora de inicio y de fin. Planificación: **no** marca asistencia
   y **no** define los días operativos.
-- **`CalendarioApertura`** — `vigente_desde`, `patron_semanal`, `excepciones[]` (fecha + abierto|cerrado).
+- **`CalendarioApertura`** — `vigente_desde`, `patron_semanal`, `excepciones[]` (fecha + abierto|cerrado),
+  **`creada_por`** y **`creada_en`**.
   Define los **días operativos**, que son el divisor del prorrateo de costos fijos (ADR-0021). Versionado
   por vigencia y separado de `HorarioProgramado`.
+  La autoría es obligatoria por lo que este dato hace: un calendario mal cargado **desplaza toda la
+  utilidad en silencio** —30 días declarados contra 26 reales dejan el costo fijo diario 13% bajo y los
+  totales del mes siguen cerrando—, es **irreversible** hacia atrás (ADR-0022), y sin autor no hay forma de
+  distinguir un error de carga de un cambio deliberado tres meses después. El patrón ya existía en
+  `CredencialCocina.actualizada_por` y en `Turno.cerrado_por`; faltaba aplicarlo donde la consecuencia es
+  mayor. **`vigente_desde` dice desde cuándo rige; `creada_en` dice cuándo se escribió, y no son lo mismo.**
 - **`ServicioCocina`** — `abierto_en`, `cerrado_en` opcional. **Sin persona: nadie firma el inicio ni el
   cierre.** Es la ventana en que el salón puede enviar comida: **sin un servicio abierto el backend rechaza
   toda comanda con `requiere_cocina`**, igual antes de la primera apertura que después del cierre
@@ -152,8 +178,10 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   queda representada la reapertura excepcional. Normalmente uno por día.
   Abrir y cerrar exigen `CredencialCocina`; cerrar exige además confirmación explícita (ADR-0018).
 - **`ConfiguracionCostos`** — `vigente_desde`; salarios flat de cocina y administrativos, costos
-  indirectos mensuales, `pct_comision`, `pct_merma`, `pct_igv`. Versionada por vigencia, y
-  **`vigente_desde` no admite fechas pasadas** (ADR-0022). Misma regla para `CalendarioApertura`.
+  indirectos mensuales, `pct_comision`, `pct_merma`, `pct_igv`, **`creada_por`** y **`creada_en`**.
+  Versionada por vigencia, y
+  **`vigente_desde` no admite fechas pasadas** (ADR-0022). Misma regla para `CalendarioApertura`, y misma
+  autoría obligatoria: los dos son irreversibles hacia atrás y los dos mueven el estado de resultados.
 - **`ConfiguracionOperativa`** — `umbral_demora_min`, `inactividad_sesion_min`. Aparte de
   `ConfiguracionCostos` porque no son costos: no alteran importes, así que no se versionan. Los dos siguen
   **sin valor definido**. `bloqueo_mesa_min` **desapareció** con ADR-0017. Editables desde la pantalla de
@@ -281,8 +309,22 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   La cuenta y el pedido **muestran las unidades agrupadas** —"2 Ceviche clásico"— porque agrupar es
   presentación; el KDS las muestra separadas porque ahí cada una se toca.
   El ítem anulado o sin insumo **no se borra**: queda tachado en la cuenta.
-- **`EventoOperacion`** — secuencia monotónica, tipo, payload, fecha. Alimenta el canal SSE y sostiene
-  la reanudación del KDS.
+- **`EventoOperacion`** — `secuencia` monotónica, `tipo`, **`alcance`** (a qué rol de dispositivo le
+  importa), **`referencia`** (el identificador mínimo para dirigir la invalidación), `fecha`. Alimenta el
+  canal SSE y sostiene la reanudación del KDS.
+  **No tiene `payload`, y es deliberado** (ADR-0035): el evento es una **señal de invalidación**, no un
+  transporte de dominio. Es la aplicación de ADR-0013 —*"el cliente mantiene una caché de consultas que
+  los eventos invalidan"*— al registro de eventos, que era donde no había llegado. El cliente recibe la
+  señal, invalida y **vuelve a pedir por tRPC**, donde la autorización ya está resuelta; así la
+  confidencialidad vive en **un solo lugar** y el canal de tiempo real no puede contradecirla.
+  **`alcance` se entrega filtrado por `Dispositivo.rol`**: una pantalla de cocina no recibe ninguna señal
+  de cuenta ni de cobro — no las filtra en el cliente, no le llegan. El default de un tipo de evento nuevo
+  es el rol **más restrictivo**, por el mismo criterio de lista blanca de ADR-0027.
+  La señal de `estacion` dice *"cambió algo en cuentas"*, **nunca** qué cuenta de qué mesero: la
+  granularidad la resuelve el refetch, que devuelve solo lo que ese mesero puede ver. Con eso la
+  suscripción sigue **sin depender de la persona** (ADR-0031) y la grilla muestra los agotados antes del
+  PIN.
+  Es el campo que alguien reintroduce "para no pagar el viaje de red": el dato se pide, no se empuja.
 
 ### Dinero
 
@@ -326,8 +368,16 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   mesero firma al entregar el dinero, y un cambio posterior de la fórmula no debe reescribir un cierre
   ya hecho. Los cuatro subtotales se guardan porque el prototipo los muestra como líneas expandibles
   por mesa.
-- **`PerdidaPorAnulacion`** — ítem anulado tras preparación, `costo_fifo`, motivo. Línea propia del
-  margen de contribución.
+- **`PerdidaPorAnulacion`** — ítem anulado tras preparación, `costo_fifo`, `motivo` **obligatorio**,
+  **`mesero`** y **`anulada_en`**. Línea propia del margen de contribución.
+  **El autor no es opcional, y es el control que sostiene la decisión de eliminar el cajero.** El `PRD.md`
+  aceptó perder la separación de funciones apoyándose en *"control por atribución"*, y la anulación es la
+  única operación que puede hacer desaparecer dinero ya cobrado: el mesero cobra en efectivo, anula la
+  unidad antes de cerrar la cuenta, y esa venta nunca existe — así que tampoco falta en su `CierreTurno`,
+  que se calcula sobre ventas registradas. Sin `mesero` la atribución no cubre la operación que más la
+  necesita.
+  El `motivo` obligatorio ya lo pedía el `PRD.md` (*"anulación de pedido con motivo registrado"*) y sigue
+  el mismo argumento que la `Merma`: sin él, una anulación es indistinguible de un faltante por robo.
 
 ## Criterios de aceptación por flujo
 
@@ -341,14 +391,62 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - [ ] **`/admin` entra con usuario y contraseña**, hasheada con KDF de memoria dura (Argon2id o bcrypt); nunca con PIN y nunca con un hash rápido. La sesión vive en cookie `httpOnly` y expira a los **60 minutos de inactividad**.
 - [ ] El **PIN de cocina son 6 dígitos** y solo se pide al abrir y cerrar el servicio (ADR-0018). El del mesero sigue siendo de 4 (ADR-0014).
 - [ ] **5 intentos fallidos bloquean el dispositivo 60 s**, y cada bloqueo siguiente duplica la espera con tope de 15 min. Un acierto reinicia el contador.
-- [ ] El bloqueo es **por dispositivo, no por cuenta**: una estación bloqueada **no afecta a las otras dos**, y ninguna cuenta queda inutilizable desde otra pantalla.
+- [ ] El bloqueo del **PIN** es **por dispositivo, no por cuenta**: una estación bloqueada **no afecta a las otras dos**, y ninguna cuenta queda inutilizable desde otra pantalla.
 - [ ] El bloqueo alcanza **solo al pedido de PIN o contraseña**. **Marcar unidades en cocina nunca se bloquea**: un lockout no puede dejar a la cocina sin poder cocinar.
 - [ ] Ni el PIN ni la contraseña revelan si el valor existe: el error es el mismo para inválido y para inexistente.
 
-**Arranque del sistema (ADR-0031)**
+**Transporte cifrado y atributos de sesión (ADR-0033)**
+
+- [ ] **Todo el tráfico va sobre TLS**, incluido el canal SSE. El backend **no escucha en claro**: una petición HTTP no se redirige, se rechaza — una redirección deja la primera petición viajando con su cookie adentro.
+- [ ] El certificado lo emite una **CA propia del local**, y su certificado raíz se instala en las **5 pantallas** como parte del mismo procedimiento de enrolamiento del dispositivo.
+- [ ] La cookie de dispositivo lleva `Secure`, `HttpOnly` y **`SameSite=Lax`** — `Lax` y no `Strict` porque tiene que sobrevivir a la navegación con que arranca cada pantalla al encenderse.
+- [ ] La cookie de sesión de `/admin` lleva `Secure`, `HttpOnly` y **`SameSite=Strict`**: no existe navegación entrante legítima desde otro sitio hacia el panel.
+- [ ] **Toda mutación tRPC valida la cabecera `Origin`** y rechaza la que no coincida con el origen del sistema. Es red de seguridad, no control principal: `SameSite` ya cubre el caso, pero depende de un default del navegador que el sistema no controla.
+- [ ] Una captura de tráfico durante un login, un cobro y una suscripción al stream **no contiene** el PIN, el token de dispositivo ni la cookie de sesión en claro.
+- [ ] Una escritura de `ConfiguracionCostos` o `CalendarioApertura` emitida desde otro origen **se rechaza**. Es el vector con daño permanente: ADR-0022 prohíbe corregir hacia atrás, así que una vigencia falsificada no se puede deshacer.
+
+**Ancla del límite de intentos y qué exige dispositivo (ADR-0034)**
+
+- [ ] **Verificar un PIN exige cookie de dispositivo válida.** Sin ella la llamada se rechaza **antes de comparar el PIN**, y el rechazo es indistinguible del PIN inválido. Cubre el PIN del mesero y el de cocina: las dos credenciales que no identifican a nadie.
+- [ ] **`/admin` no exige dispositivo**, y su contador va **por cuenta y por IP de origen**. Misma escalera —5 intentos, 60 s, duplicación con tope de 15 min, reinicio con acierto—, distinto ancla: usuario y contraseña sí identifican una cuenta contra la cual contar.
+- [ ] Existe un **contador de respaldo por IP** para todo intento sin dispositivo: ninguna implementación puede quedar sin límite alguno.
+- [ ] 200 intentos automatizados de PIN sin cookie de dispositivo **no producen ninguna sesión válida** y quedan limitados por el contador de respaldo.
+- [ ] Los **tres contadores** —dispositivo, cuenta e IP— se verifican por separado. Un contador mal anclado no falla: simplemente no protege, y el error es silencioso.
+- [ ] `Dispositivo.rol` sigue siendo `estacion | kds | cocina`: **no existe el rol `admin`** y `/admin` no es un suscriptor del canal SSE.
+
+**Alcance del canal SSE (ADR-0035)**
+
+- [ ] **Ningún evento lleva dominio.** `EventoOperacion` no tiene `payload`: el cliente recibe la señal, invalida su consulta y **vuelve a pedir por tRPC**. La confidencialidad vive en un solo lugar, y el canal de tiempo real no puede contradecirla porque no transporta nada que contradecir.
+- [ ] **El stream se filtra por `Dispositivo.rol` en el servidor.** Un dispositivo con rol `kds` o `cocina` suscripto durante un cobro completo **no recibe ninguna señal** de cuenta, pago ni cierre de turno. No las descarta en el cliente: no le llegan.
+- [ ] La señal que reciben las estaciones dice **"cambió algo en cuentas"**, nunca qué cuenta de qué mesero. La granularidad la resuelve el refetch, que devuelve solo lo que ese mesero puede ver — o nada si no hay sesión abierta.
+- [ ] **La suscripción sigue sin depender de la persona** (ADR-0031): con la estación en la pantalla de PIN y sin nadie identificado, la grilla recibe igual los cambios de disponibilidad y el estado del servicio de cocina.
+- [ ] **La reanudación respeta el mismo filtro que la suscripción en vivo.** Un dispositivo no puede recuperar por `Last-Event-ID` lo que no podía recibir en vivo.
+- [ ] Un `Last-Event-ID` **anterior al horizonte de archivado** devuelve *resincronizá todo* y el cliente refetchea. Purgar el registro de eventos **no pierde ningún dato**: el dominio lo tiene.
+- [ ] Una **ráfaga** de eventos del mismo tipo se agrupa: 20 comandas seguidas no disparan 20 refetches de la misma cola. Es el costo que ADR-0013 declaró y que ahora también paga el KDS.
+- [ ] Un tipo de evento nuevo sin `alcance` definido **no se entrega a nadie**: el default es el rol más restrictivo, nunca el más amplio (mismo criterio de lista blanca que ADR-0027).
+
+**Hash de los secretos y ciclo de vida del token (ADR-0036)**
+
+- [ ] **Los tres secretos de baja entropía** —PIN de mesero, PIN de cocina y contraseña de `/admin`— se hashean con **Argon2id** y **sal única por credencial**. Ninguno con un hash rápido.
+- [ ] El **token de dispositivo** es de **≥ 128 bits de un CSPRNG** y se hashea con **SHA-256 con sal**, no con KDF: se verifica en cada request del stream y un KDF ahí sería una denegación de servicio contra uno mismo.
+- [ ] **Dos credenciales sembradas con el mismo valor producen hashes distintos.** Verificar un PIN cuesta por encima de un umbral medible (> 50 ms); verificar un token de dispositivo, no.
+- [ ] Dos enrolamientos consecutivos producen tokens **sin ninguna relación deducible**.
+- [ ] `Dispositivo.expira_en` son **90 días con renovación automática mientras el dispositivo se use**. Una pantalla en uso diario nunca vence; una apagada caduca sola.
+- [ ] Un **token vencido se rechaza** en la suscripción al stream aunque el dispositivo no esté revocado.
+- [ ] `/admin` ofrece **rotar el token sin re-enrolar** el equipo, distinguido en la interfaz de la revocación: elegir mal en una pérdida real decide si el equipo robado sigue leyendo el stream.
+- [ ] La regla *"dos personas no pueden compartir PIN"* se verifica **comprobando contra cada PIN activo** al dar de alta: con sal por credencial no existe el índice único que antes la resolvía.
+
+**Política de la contraseña de `/admin` (SEC-09)**
+
+- [ ] La contraseña nueva exige **mínimo 12 caracteres**. Rotar a una más corta **falla, con el motivo explicado**.
+- [ ] Rotar a la **misma contraseña sembrada** falla: la rotación obligatoria del primer ingreso no se puede cumplir en el papel sin cumplirse de hecho.
+- [ ] La contraseña se contrasta contra una **lista de contraseñas comunes** y se rechaza si figura. Es el único secreto fuerte del sistema y **no tiene segundo factor** (fuera de alcance, ADR-0031).
+
+**Arranque del sistema (ADR-0031, abierto por ADR-0034)**
 
 - [ ] La migración inicial crea **un administrador y nada más**: su contraseña se genera al sembrar, se muestra **una sola vez** y **debe rotarse en el primer ingreso**.
-- [ ] No se siembra ninguna `CredencialCocina` ni ningún `Dispositivo`: los define el administrador.
+- [ ] No se siembra ninguna `CredencialCocina` ni ningún `Dispositivo`: los define el administrador. **Tampoco un dispositivo de arranque** — no hace falta, porque `/admin` no exige uno (ADR-0034).
+- [ ] **La cadena de arranque se recorre entera desde una base vacía**, sin modo de primer arranque ni excepción temporal: el administrador sembrado entra a `/admin`, rota su contraseña, enrola las 5 pantallas —token más certificado raíz (ADR-0033)— y define la `CredencialCocina`. Recién ahí el salón puede vender comida.
 - [ ] La **revisión de pendientes** lista *PIN de cocina sin definir* y *ningún dispositivo enrolado*, junto a los platos sin receta y los insumos sin compras.
 - [ ] Desde una base vacía, el escenario simulado del PRD **recorre el ciclo completo sin ninguna intervención manual fuera del sistema**.
 
@@ -512,6 +610,14 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - [ ] La anulación es **por unidad**: anular una de dos unidades del mismo plato deja la otra vigente, porque cada unidad es su propia fila de `ItemComanda`.
 - [ ] Anular una unidad de una orden **no terminada** no genera ningún movimiento de inventario.
 - [ ] Anular una unidad de una orden **ya terminada** no revierte los movimientos y registra una pérdida por anulación con su costo FIFO.
+
+**Atribución de la anulación (SEC-07)**
+
+- [ ] **Anular sin motivo falla**, igual que registrar una merma sin motivo. El `PRD.md` ya lo pedía —*"anulación de pedido con motivo registrado"*— y hasta acá no era criterio.
+- [ ] Toda `PerdidaPorAnulacion` registra **`mesero` y `anulada_en`**. Sin autor, la atribución no cubre la única operación que puede hacer desaparecer dinero ya cobrado.
+- [ ] El ranking de **anulaciones y faltantes** del dashboard corta **por mesero además de por plato**. Con el corte solo por plato, una anulación por servicio se pierde entre las legítimas.
+- [ ] En un escenario simulado con **dos meseros y varias anulaciones** antes y después de preparar, el reporte dice cuántas anuló cada uno y con qué costo acumulado.
+- [ ] Anular es **siempre** del dueño de la cuenta: anular sobre la cuenta de otro mesero **falla en el servidor**, por el mismo camino que cobrarla o editarla (ADR-0017).
 - [ ] Ninguna unidad anulada suma a la venta ni a la comisión del mesero.
 - [ ] La unidad anulada **no se borra**: queda tachada en la cuenta, con forma además de color.
 - [ ] El KDS recibe la anulación y la muestra tachada con icono, no solo en color.
@@ -530,6 +636,13 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 
 - [ ] El cobro se inicia con **Cobrar mesa** desde la pantalla del pedido, sin cambiar de estación ni de usuario.
 - [ ] La cuenta indica boleta o factura y queda registrada como comprobante sin emitir; una `factura` sin RUC y razón social no se puede grabar.
+
+**Datos personales del receptor (SEC-06)**
+
+- [ ] En **boleta**, los tres campos —DNI, nombre y dirección— **no se piden por defecto**: se ofrecen. El `PRD.md` ya decidió que *"una boleta sin datos es válida"*, y la interfaz tiene que reflejar que **no recolectar es el camino normal**, no una excepción.
+- [ ] **Un mesero no puede leer los datos del receptor de un comprobante que no cobró él.** Es la misma frontera que ya rige para *cobros realizados del turno*, extendida al único campo del sistema que guarda datos de un tercero.
+- [ ] La **factura** sigue exigiendo RUC, razón social y dirección fiscal: son datos de una empresa y su obligatoriedad es fiscal, no una decisión de producto.
+- [ ] Ningún reporte del dashboard, ninguna exportación y ningún evento del canal SSE incluye datos del receptor.
 - [ ] Cada cobro almacena venta neta e IGV por separado, y la estación los muestra desglosados.
 - [ ] Registrar un pago exige método elegido y comprobante grabado; si falta cualquiera de los dos, la confirmación queda bloqueada.
 - [ ] Un pago en efectivo con monto recibido menor al total no se puede confirmar; si excede, la diferencia se ofrece como propina o como vuelto, nunca como venta.
@@ -599,6 +712,8 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 ### Gestión — estructura de costos
 
 - [ ] Guardar **crea una versión nueva** con fecha de vigencia; no edita la vigente.
+- [ ] Toda versión registra **`creada_por` y `creada_en`**, y la pantalla de parámetros los muestra junto a su vigencia (SEC-08). Son dos datos distintos: `vigente_desde` dice desde cuándo rige, `creada_en` dice cuándo se escribió.
+- [ ] Lo mismo aplica al **calendario de apertura**: es el divisor de todo el estado de resultados, es irreversible hacia atrás (ADR-0022) y sin autor un error de carga es indistinguible de un cambio deliberado.
 - [ ] Un periodo ya reportado da idéntico resultado antes y después de crear una versión nueva.
 - [ ] Antes de guardar se muestra el efecto sobre el margen sumado de los platos costeables, con la diferencia.
 - [ ] Los porcentajes de comisión, merma e IGV se rechazan si son negativos o mayores que 100.
@@ -703,8 +818,11 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - **El calendario de apertura mal cargado desplaza toda la utilidad, en silencio.** Si declara 30 días operativos y el local abre 26, el costo fijo diario queda 13% bajo y cada día se ve más rentable de lo que es (ADR-0021). Los totales del mes siguen cerrando, así que el error no se delata por ningún lado. Es el mismo riesgo de disciplina de carga que el PRD ya declara para recetas y compras.
 - **Corrección hacia atrás imposible por diseño.** Con vigencia solo hacia adelante (ADR-0022), un porcentaje o un calendario cargados mal en julio no se pueden arreglar en septiembre. Es coherente con los snapshots inmutables, pero es una limitación real que la interfaz tiene que decir antes de guardar, no después.
 - **Métricas de duración futuras exigen migración.** Al medir con marcas de tiempo en la entidad (ADR-0023) y no sobre el registro de eventos, cualquier duración que no se esté guardando hoy no se puede reconstruir hacia atrás. El caso concreto ya identificado: el instante en que el mesero retira un plato listo no se registra en ningún lado.
-- **HTTP/2 es requisito de producción**, no una optimización: sobre HTTP/1.1 el límite de conexiones por origen puede agotarse con varias pestañas por estación (ADR-0008).
-- **Crecimiento sin política de archivado.** El registro de eventos (ADR-0009) y el libro de movimientos (ADR-0005) crecen sin límite. El libro además va a requerir un saldo materializado por insumo cuando sumar movimientos deje de ser viable.
+- **HTTP/2 es requisito de producción**, no una optimización: sobre HTTP/1.1 el límite de conexiones por origen puede agotarse con varias pestañas por estación (ADR-0008). Con ADR-0033 el TLS que HTTP/2 necesita ya está decidido, así que el requisito dejó de tener un pie en el aire.
+- **El certificado vencido deja el local sin sistema, y nada lo anticipa** (ADR-0033). No hay revocación selectiva que lo salve: caen las 5 pantallas a la vez. La renovación es una tarea operativa con consecuencia total y sin alarma en el producto — es el mismo tipo de riesgo por disciplina que la carga de compras, pero con falla dura en vez de silenciosa.
+- **La clave privada de la CA es ahora el secreto más fuerte del sistema** (ADR-0033), y desplaza a la contraseña del administrador de ese lugar. No vive en la base, no tiene rotación definida y quien la tenga puede emitir un certificado válido para cualquier nombre sin que ninguna pantalla proteste. Queda fuera del modelo de datos y, por lo tanto, fuera de todo lo que el sistema sabe auditar.
+- **El `alcance` del evento es disciplina de carga, y se equivoca en silencio** (ADR-0035). El filtrado del stream es tan bueno como el `alcance` que se le ponga a cada tipo de evento nuevo, y errarle hacia el lado amplio no rompe nada visible: el evento llega a quien no debía y nadie lo nota. El default restrictivo lo acota, no lo elimina. Es el mismo riesgo de disciplina que el calendario de apertura, con la diferencia de que acá el síntoma no es un número raro sino la ausencia de síntoma.
+- **Crecimiento sin política de archivado.** El registro de eventos (ADR-0009) y el libro de movimientos (ADR-0005) crecen sin límite. El libro además va a requerir un saldo materializado por insumo cuando sumar movimientos deje de ser viable. **El riesgo del registro de eventos bajó con ADR-0035**: sin `payload`, purgarlo no pierde ningún dato —un cliente que reanuda desde un ID purgado resincroniza y refetchea—, así que pasó de riesgo de datos a decisión de rendimiento. El del libro de movimientos sigue igual.
 - **Corrección de datos históricos.** El PRD listó como caso borde corregir una compra ya consumida por ventas cerradas. Con snapshots inmutables el ajuste no se propaga y hace falta un mecanismo explícito que todavía no existe.
 - **Despliegue acoplado.** Un solo artefacto de cliente significa que no se puede corregir el dashboard sin recargar el KDS y las estaciones (ADR-0001). En pleno servicio, eso es una ventana de riesgo.
 - **La emisión electrónica sigue fuera de alcance.** El comprobante está modelado pero no se emite, así que en un uso real cada venta debería transcribirse a un emisor externo. tRPC (ADR-0010) además no deja una API que un facturador de terceros pueda consumir.
