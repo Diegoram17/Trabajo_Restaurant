@@ -1,0 +1,710 @@
+# Technical Design Document: POS para Restaurantes
+
+**Tipo de proyecto:** Greenfield — sin código previo. Todas las decisiones se tomaron en este proceso.
+**Design.md disponible:** Sí — `DESIGN.md` se usó como entrada del modelo de datos; varias entidades y
+campos salen de lo que la interfaz revela que hay que mostrar, no del PRD.
+**Alineado con:** `PRD.md` — sin rol de cajero (el mesero cobra y cierra turno en su estación) y con
+el flujo de cocina en dos pasos sobre dos pantallas sin identificación. Los archivos de `prototypes/` son
+**referencia, no autoridad**: donde un prototipo y este documento discrepen, **gana este documento**, y el
+prototipo se actualiza o se reemplaza cuando el proyecto lo requiera.
+
+## Resumen
+
+Sistema de punto de venta para un restaurante de salón que cubre el ciclo completo —toma de pedido,
+cocina, cobro y descuento de inventario— y culmina en un dashboard de rentabilidad construido con
+costeo FIFO real. El entregable central del PRD no es la operación sino el dato: que el margen por
+plato y la utilidad estimada salgan de la operación misma, sin planillas auxiliares.
+
+Ese objetivo es el que ordena las decisiones técnicas: la exactitud monetaria y la reproducibilidad
+histórica pesan más que el rendimiento o la flexibilidad, y varias decisiones aceptan costo operativo
+a cambio de que un número del dashboard nunca cambie una vez cerrado.
+
+## Arquitectura de componentes
+
+Dos artefactos desplegables (ADR-0001):
+
+```
+┌──────────────────────────────────────────────────────┐
+│  SPA (React + TypeScript)                            │
+│  /estacion · /kds · /cocina · /admin                 │
+└──────────────┬─────────────────────┬─────────────────┘
+               │ tRPC (llamadas)     │ SSE (eventos)
+               ▼                     ▲
+┌──────────────────────────────────────────────────────┐
+│  Backend (Node + TypeScript)                         │
+│  ├─ Router tRPC          — contrato tipado           │
+│  ├─ Dominio              — FIFO, costeo, comisiones  │
+│  ├─ Emisor de eventos    — escribe y publica         │
+│  └─ Canal SSE            — reanuda por Last-Event-ID │
+└──────────────────────────┬───────────────────────────┘
+                           ▼
+┌──────────────────────────────────────────────────────┐
+│  PostgreSQL                                          │
+│  Dominio · Libro de movimientos · Registro de eventos│
+└──────────────────────────────────────────────────────┘
+```
+
+**Responsabilidades**
+
+- **SPA** — cuatro rutas en tres contextos de uso, cada una con su tema y densidad. Cocina son **dos**
+  (ADR-0016): `/kds` es la pantalla de pared, **solo lectura y sin sesión**, y `/cocina` es la estación
+  táctil que marca las comandas, autorizada por **estar iniciada** y ser el dispositivo de la cocina —
+  **sin turno y sin sesión**. El marcado no pide nada; **abrir y cerrar el servicio sí exigen el PIN de
+  cocina**, que es llave del servicio y no identidad (ADR-0018). `/admin` agrupa gestión y
+  dashboard bajo el mismo rol y tema. **No existe una ruta `/caja`**: desde la v1.2 el cobro es una vista
+  dentro de `/estacion` (PRD, *Cobro (mesero)*). No guarda estado del dominio (ADR-0013): consulta, y los
+  eventos invalidan su caché.
+- **Backend** — dueño de todas las reglas de negocio. Ninguna regla de dinero vive en el cliente.
+- **PostgreSQL** — además del dominio, aloja el libro de movimientos de inventario (ADR-0005) y el
+  registro de eventos que sostiene la garantía de entrega al KDS (ADR-0009).
+
+**Comunicación** — llamadas del cliente al servidor por tRPC; empuje del servidor al cliente por SSE.
+La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del registro de eventos.
+
+## Decisiones de arquitectura
+
+| # | Decisión | Estado |
+|---|---|---|
+| [ADR-0001](adrs/0001-arquitectura-de-componentes.md) | Un backend y una SPA multi-rol | Aceptado |
+| [ADR-0002](adrs/0002-stack-de-aplicacion.md) | TypeScript de punta a punta | Aceptado |
+| [ADR-0003](adrs/0003-motor-de-base-de-datos.md) | PostgreSQL como motor de base de datos | Aceptado |
+| [ADR-0004](adrs/0004-venta-cerrada-como-snapshot.md) | La venta cerrada es un snapshot inmutable | Aceptado, **completado por 0029** |
+| [ADR-0005](adrs/0005-inventario-como-libro-de-movimientos.md) | El inventario es un libro de movimientos | Aceptado |
+| [ADR-0006](adrs/0006-momento-del-consumo-de-inventario.md) | El inventario se descuenta al preparar | Aceptado, **refinado por 0016 y extendido por 0026** |
+| [ADR-0007](adrs/0007-concurrencia-sobre-lotes-fifo.md) | Bloqueo pesimista sobre lotes FIFO | Aceptado, **completado por 0030** |
+| [ADR-0008](adrs/0008-transporte-de-tiempo-real.md) | Server-Sent Events para actualizaciones en vivo | Aceptado |
+| [ADR-0009](adrs/0009-durabilidad-de-la-cola-de-eventos.md) | Registro de eventos persistido en PostgreSQL | Aceptado |
+| [ADR-0010](adrs/0010-contrato-de-api.md) | tRPC como contrato entre backend y SPA | Aceptado |
+| [ADR-0011](adrs/0011-representacion-de-importes.md) | Los importes son enteros en unidad mínima | Aceptado, **completado por 0032** |
+| [ADR-0012](adrs/0012-concurrencia-sobre-la-mesa.md) | Mesa con mesero asignado y bloqueo suave | **Reemplazado por ADR-0017** |
+| [ADR-0013](adrs/0013-estado-del-dominio-en-el-cliente.md) | El servidor es la única fuente de verdad | Aceptado |
+| [ADR-0014](adrs/0014-sesion-en-estacion-compartida.md) | Sesión corta con cierre automático | Aceptado, **precisado por 0020, completado por 0031** |
+| [ADR-0015](adrs/0015-sin-escritura-sin-conexion.md) | Las estaciones no escriben sin conexión | Aceptado |
+| [ADR-0016](adrs/0016-identidad-en-cocina.md) | Cocina: sin identidad de usuario, con autoridad sobre el servicio | Aceptado, **enmendado por 0018, 0019, 0031 y el PRD v1.5** |
+| [ADR-0017](adrs/0017-cuenta-por-mesero.md) | La cuenta es del mesero y el estado de la mesa se deriva | Aceptado, **predicado corregido por 0027** |
+| [ADR-0018](adrs/0018-credencial-de-cocina.md) | La credencial de cocina es una llave del servicio, no una identidad | Aceptado, **completado por 0031** |
+| [ADR-0019](adrs/0019-ventana-de-servicio-simetrica.md) | Ventana de servicio simétrica y rechazo atómico de la comanda | Aceptado, **precisado por 0026 y 0028** |
+| [ADR-0020](adrs/0020-turno-como-registro-de-horas.md) | El turno es el registro de horas, no la sesión de estación | Aceptado, **riesgo cerrado por 0024, precisado por 0028** |
+| [ADR-0021](adrs/0021-dias-operativos-y-prorrateo.md) | El día operativo sale de un calendario de apertura propio | Aceptado, **precisado por 0028** |
+| [ADR-0022](adrs/0022-estabilidad-del-resultado.md) | Reportes al vuelo, estables por vigencia hacia adelante | Aceptado, **precisado por 0028** |
+| [ADR-0023](adrs/0023-marcas-de-tiempo-operativas.md) | Las duraciones se miden en la entidad dueña del hecho | Aceptado, **precisado por 0028** |
+| [ADR-0024](adrs/0024-cierre-tardio-de-turno.md) | El turno sin cerrar lo cierra el administrador, con hora corregible | Aceptado |
+| [ADR-0025](adrs/0025-movimiento-y-fusion-de-cuentas.md) | La cuenta se mueve de mesa, y se fusiona solo dentro del mismo mesero | Aceptado, **corregido por 0027** |
+| [ADR-0026](adrs/0026-consumo-del-item-sin-cocina.md) | El ítem que no requiere cocina consume inventario al enviarse | Aceptado |
+| [ADR-0027](adrs/0027-cuenta-fusionada-y-marca-de-mesa.md) | La cuenta fusionada no ocupa la mesa, y el cambio de mesa se marca en la comanda | Aceptado |
+| [ADR-0028](adrs/0028-dia-operativo.md) | El día operativo arranca a las 05:00 y es la única unidad de día | Aceptado |
+| [ADR-0029](adrs/0029-el-combo-se-descompone-al-enviarse.md) | El combo se descompone al enviarse y no existe como fila de dominio | Aceptado |
+| [ADR-0030](adrs/0030-clave-de-ordenamiento-fifo.md) | El consumo FIFO se ordena por número de lote, no por fecha de compra | Aceptado |
+| [ADR-0031](adrs/0031-politica-de-acceso.md) | Tres capas de acceso: dispositivo, persona y llave de servicio | Aceptado |
+| [ADR-0032](adrs/0032-regla-de-redondeo.md) | La regla de redondeo y su punto de aplicación | Aceptado, **completa 0011** |
+
+## Modelo de datos
+
+Todos los importes son enteros en unidad mínima (ADR-0011). Las cantidades de insumo son enteros en la
+unidad base del insumo (gramos, mililitros, unidades).
+
+**El *día* del sistema es el día operativo (ADR-0028): arranca a las 05:00 hora de Lima y dura 24 horas.**
+Los instantes se guardan en UTC (`timestamptz`) y el día operativo se **calcula, nunca se persiste**:
+
+```
+dia_operativo(instante) = DATE( (instante AT TIME ZONE 'America/Lima') − INTERVAL '5 hours' )
+```
+
+Es una **constante del sistema**, no un parámetro: no vive en `ConfiguracionOperativa` —que existe para lo
+que no altera importes— ni se versiona, porque cambiarla re-agruparía ventas ya reportadas. Toda
+agregación por día pasa por esta función; **ningún `DATE(timestamp)` suelto es válido**, y el que se olvide
+falla en silencio con un número plausible que no reconcilia. Vive en un solo lugar de la base.
+
+### Identidad y configuración
+
+- **`Persona`** — nombre, rol (`mesero` | `cocina` | `administrador`), `pin_hash`, `sueldo_fijo`, activo.
+  **No hay rol `cajero`.** `pin_hash` solo aplica a `mesero`: el PIN de cocina no es de una persona y vive
+  en `CredencialCocina` (ADR-0018). **`/admin` va con usuario y contraseña**, no con PIN: hasheada con KDF de
+  memoria dura y sesión de 60 min de inactividad (ADR-0031). Una
+  `Persona` de rol `cocina` existe para costos y horarios, no para entrar al sistema.
+- **`Dispositivo`** — nombre, rol (`estacion` | `kds` | `cocina`), `token_hash`, `enrolado_en`,
+  `revocado_en`. Es la **primera capa de acceso** (ADR-0031): autoriza leer el stream SSE y presentarse como
+  esa ruta, y **ninguna acción**. Se enrola desde `/admin`, el token se muestra una sola vez y viaja en
+  cookie `httpOnly` — que es lo que `EventSource` sabe enviar sin headers.
+- **`CredencialCocina`** — `pin_hash` de **6 dígitos** (ADR-0031), `actualizada_en`, `actualizada_por`. Llave del ciclo del servicio,
+  no identidad: se verifica al abrir y cerrar, **nunca** en el marcado (ADR-0018). Entidad propia y no un
+  campo de configuración porque es un secreto: no se muestra y se rota por otro motivo.
+- **`Turno`** — **mesero**, estación de apertura, `abierto_en`, `origen_apertura`
+  (`marcado` | `primer_login`), `cerrado_en`, `cerrado_por` (`mesero` | `administrador`),
+  `cerrado_en_propuesto`, `motivo_cierre_tardio`.
+  Es entidad y no campo porque agrupa el efectivo del cierre y **es el registro de horas efectivas**
+  (ADR-0020). Cerró la observación #8 de la revisión adversarial anterior, que ya no figura como hallazgo abierto.
+  **No es la sesión de estación** (ADR-0014): hay muchas sesiones dentro de un turno, y las horas son del
+  turno. Los tres campos de traza sostienen el cierre tardío del administrador (ADR-0024).
+  **Invariante:** `cerrado_en` no puede ser posterior al `abierto_en` del siguiente turno del mismo
+  mesero, o las horas dejan de ser sumables.
+  **Solo del mesero:** cocina no ficha, así que no hay turno de cocina.
+- **`HorarioProgramado`** — persona, fecha, hora de inicio y de fin. Planificación: **no** marca asistencia
+  y **no** define los días operativos.
+- **`CalendarioApertura`** — `vigente_desde`, `patron_semanal`, `excepciones[]` (fecha + abierto|cerrado).
+  Define los **días operativos**, que son el divisor del prorrateo de costos fijos (ADR-0021). Versionado
+  por vigencia y separado de `HorarioProgramado`.
+- **`ServicioCocina`** — `abierto_en`, `cerrado_en` opcional. **Sin persona: nadie firma el inicio ni el
+  cierre.** Es la ventana en que el salón puede enviar comida: **sin un servicio abierto el backend rechaza
+  toda comanda con `requiere_cocina`**, igual antes de la primera apertura que después del cierre
+  (ADR-0019). Bebidas, cobro y cierre de turno siguen funcionando.
+  Una fila **por servicio**, no un interruptor: **reabrir no existe**, se inicia uno nuevo — que es como
+  queda representada la reapertura excepcional. Normalmente uno por día.
+  Abrir y cerrar exigen `CredencialCocina`; cerrar exige además confirmación explícita (ADR-0018).
+- **`ConfiguracionCostos`** — `vigente_desde`; salarios flat de cocina y administrativos, costos
+  indirectos mensuales, `pct_comision`, `pct_merma`, `pct_igv`. Versionada por vigencia, y
+  **`vigente_desde` no admite fechas pasadas** (ADR-0022). Misma regla para `CalendarioApertura`.
+- **`ConfiguracionOperativa`** — `umbral_demora_min`, `inactividad_sesion_min`. Aparte de
+  `ConfiguracionCostos` porque no son costos: no alteran importes, así que no se versionan. Los dos siguen
+  **sin valor definido**. `bloqueo_mesa_min` **desapareció** con ADR-0017. Editables desde la pantalla de
+  parámetros, junto con los porcentajes.
+
+### Menú
+
+- **`Categoria`**
+- **`Plato`** — nombre, foto, `precio_venta`, categoría, `disponible`, `motivo_no_disponible`
+  (`automatico` | `manual`), **`requiere_cocina`**. El motivo existe porque el `DESIGN.md` muestra el
+  plato agotado deshabilitado en la grilla, y el administrador necesita saber si puede reactivarlo a mano.
+  `requiere_cocina` decide si el plato se puede vender sin servicio de cocina abierto (ADR-0019). Es una
+  marca **manual por plato**: no se deriva de la categoría ni de tener receta (el criterio y su ejemplo,
+  en el PRD).
+- **`RecetaInsumo`** — plato, insumo, cantidad. El puente entre venta e inventario.
+- **`Combo`** — nombre, foto, `precio_venta` propio.
+- **`ComboItem`** — combo, plato, cantidad. El combo **no tiene receta propia**: al venderse descuenta
+  la receta de cada plato que lo compone. Su disponibilidad se deriva: si algún componente está
+  agotado, el combo lo está.
+
+### Inventario
+
+- **`Insumo`** — nombre, `unidad_base`, `stock_minimo_alerta`.
+- **`Compra`** — es el **lote**. Insumo, `numero_lote`, cantidad, `precio_pagado_total`,
+  `genera_credito_fiscal`, **`costo_costeado_total`**, fecha. **`numero_lote` es la clave de consumo FIFO**
+  —orden de registro, un orden
+  total sin desempate (ADR-0030)—; **`fecha` es informativa y no ordena nada**, así que ninguna consulta de
+  consumo la toca. La marca de crédito fiscal decide si el lote se costea neto (con factura, el IGV se recupera)
+  o bruto (sin comprobante).
+  **`costo_costeado_total` se persiste, no se deriva** (ADR-0032): es el importe que el consumo FIFO
+  reparte entre sus movimientos, y se calcula **una sola vez, al registrar la compra** —neto con crédito
+  fiscal, precio pagado completo sin él—. Derivarlo al vuelo lo ataría a `ConfiguracionCostos.pct_igv`,
+  que está versionada: una vigencia nueva de IGV le cambiaría el costo a lotes ya consumidos por ventas
+  cerradas, que es exactamente lo que ADR-0004 y ADR-0022 prohíben. El único punto de redondeo del IGV de
+  compra vive acá.
+- **`MovimientoInventario`** — insumo, lote de origen, tipo (`entrada` | `salida` | `ajuste`),
+  cantidad, **`costo_aplicado`** (el costo **total** del movimiento, entero en céntimos), origen
+  (`compra` | `comanda_preparada` | `merma_registrada` | `ajuste`), referencia. `merma_registrada` cubre
+  la merma puntual que el administrador carga a mano (PRD v1.1), distinta del `pct_merma` estimado que
+  solo vive en el reporte.
+  Append-only. El stock es la suma de los movimientos.
+  **No hay costo unitario, y es deliberado** (ADR-0032). El costo por unidad base de un insumo vive por
+  debajo del céntimo —un lote de 1200 g a S/ 50,00 son 4,1666 céntimos por gramo—, así que persistirlo
+  como entero en céntimos costearía ese gramo a 4 y metería un **4% de error** en la cifra que el
+  producto viene a vender. El costo del movimiento se calcula por proporción del lote
+  —`redondear(cantidad × costo_costeado_lote / cantidad_lote)`— y solo se persiste el importe final, que
+  sí es dinero. El movimiento que **agota** el lote absorbe el saldo monetario restante, de modo que la
+  suma de los movimientos de un lote es exactamente su costo. Es la clase de campo que alguien reintroduce
+  "para ver el costo por gramo": el costo por gramo se deriva del lote, no se guarda.
+- **`Merma`** — insumo, cantidad, `motivo`, `costo_fifo`, fecha. Entidad propia y no un
+  `MovimientoInventario` con comentario, por la misma razón que `PerdidaPorAnulacion`: es una **pérdida
+  medida con causa**, y el margen la necesita como línea identificable. El `motivo` es obligatorio —
+  sin él una merma es indistinguible de un faltante por robo o de una receta mal cargada, que es
+  justo lo que el PRD advierte como riesgo.
+- **`IncidenciaStock`** — insumo, cantidad faltante, `origen` (`stock_negativo` | `sin_insumo_en_cocina`),
+  movimiento o unidad de referencia, resuelta, `modo_regularizacion` (`compra` | `ajuste` | `receta`).
+  El modo se registra porque las tres causas tienen implicancias distintas: una compra tardía se corrige
+  cargando el lote, un ajuste admite que el libro estaba desalineado, y una receta mal cargada significa
+  que **todas** las ventas anteriores costearon mal.
+  El origen `sin_insumo_en_cocina` es el que cocina genera al marcar una unidad como *sin insumo*
+  (ADR-0016). Los dos orígenes son la misma falla vista desde dos puntas: el sistema creyó que había
+  insumo y no había. Que caigan en la misma bandeja es deliberado — el PRD advierte que *"si aparece
+  seguido, es señal de recetas mal cargadas o compras registradas tarde"*, y esa señal se pierde si están
+  en dos listas separadas.
+
+### Operación
+
+- **`Mesa`** — **solo su número** (ADR-0017). Su estado **no es un campo**: *libre* u *ocupada* se deriva
+  de cuántas cuentas tiene en `abierta` o `en_cobro` (ADR-0027). **El predicado es una lista blanca, no
+  `<> cerrada`**: con la lista negra, el estado `fusionada` que agregó ADR-0025 se coló solo y dejaba la
+  mesa ocupada para siempre. Requiere índice sobre `(mesa, estado)`: la grilla de mesas es la
+  lectura más caliente del sistema, con hasta 3 estaciones refrescándola en vivo.
+- **`Cuenta`** — mesa, **mesero dueño**, estado (`abierta` | `en_cobro` | `cerrada` | `fusionada`),
+  `abierta_en`, `cerrada_en`, `mesa_anterior`, `mesa_cambiada_en`, **`fusionada_en`** (timestamp) y
+  **`absorbida_por`** (FK a la cuenta absorbente). Los dos últimos eran un solo campo sobrecargado hasta
+  ADR-0027: `fusionada_en` se usaba a la vez como instante y como referencia, y no puede ser las dos cosas. Acumula todas las
+  rondas hasta el pago. El estado intermedio es `en_cobro` y no `en_caja`: la cuenta no viaja a otra
+  estación.
+  **Es la unidad de propiedad, no la mesa** (ADR-0017): unicidad `(mesa, mesero)` mientras esté en
+  `abierta` o `en_cobro` (ADR-0027), y **ninguna consulta de autorización mira la mesa** — para abrir, editar o cobrar se mira la
+  cuenta y su mesero.
+  `abierta_en` y `cerrada_en` sostienen la rotación de mesas y la curva de ventas por hora (ADR-0023).
+  `mesa_anterior` y `mesa_cambiada_en` **ya no los lee el KDS** (ADR-0027): esa marca pasó a
+  `Comanda.mesa_en_creacion`. Quedan como **historia de la cuenta** —explican por qué la rotación de esa
+  mesa se ve rara— y no como fuente de la re-etiquetación.
+  **Trampa, ahora desactivada por construcción:** `fusionada` marca la cuenta absorbida, y filtrar por
+  `estado <> cerrada` la contaba y duplicaba totales. El predicado vigente es la **lista blanca**
+  `estado IN (abierta, en_cobro)` (ADR-0027), así que un estado nuevo queda afuera por omisión en vez de
+  colarse solo. La cuenta absorbida **conserva su `mesa`** —es donde ocurrió— y lo que se mueve son sus
+  comandas. La fusión es solo
+  entre cuentas del mismo mesero, y la resultante conserva el `abierta_en` más antiguo.
+- **`Comanda`** — cuenta, **mesero que la tomó** —que con ADR-0017 es **siempre** el dueño de la cuenta,
+  porque nadie puede tomar sobre la cuenta de otro; se conserva explícito por ser la base de la
+  comisión—, número de ronda, estado (`pendiente` | `terminada` | `anulada`), `creada_en`,
+  **`terminada_en`**. `terminada` es terminal y es el paso que **escribe el inventario** (ADR-0006
+  refinado por ADR-0016): solo se puede terminar una orden cuando todas sus unidades están resueltas.
+  **El estado `demorada` no es un campo**: se **deriva** de `creada_en` + `ConfiguracionOperativa.umbral_demora_min`
+  mientras la orden siga `pendiente`. Nadie lo marca, así que no le cuesta un toque a cocina, y no hay
+  un estado más que mantener sincronizado.
+  **No registra quién la terminó, ni persona ni turno** (ADR-0016): cocina no tiene identidad, así que la
+  escritura de inventario es **anónima por diseño**. El costo está declarado en el ADR.
+  **`mesa_en_creacion`** guarda la mesa para la que se creó (ADR-0027). Es el snapshot que el KDS compara
+  contra la mesa efectiva de su cuenta para tachar la anterior; reemplaza a la regla temporal de ADR-0025,
+  que solo cubría *mover* y sobrevive a un segundo cambio de mesa. Mismo patrón que
+  `ItemComanda.precio_unitario_snapshot`: guarda lo que era cierto cuando el hecho ocurrió.
+  **Una comanda sin ningún ítem que requiera cocina nace `terminada`** (ADR-0026), con
+  `terminada_en = creada_en` y sus unidades en `listo`, y escribe su inventario en la misma transacción de
+  creación. No es un momento de consumo nuevo: sigue siendo *"se escribe al pasar a `terminada`"*, solo que
+  llega ahí sola. Con eso **nunca está `pendiente`**, así que no entra al KDS y no puede trabar el cierre
+  de cocina.
+  **Un pedido mixto se persiste como dos comandas** —una sin cocina y una de cocina—, de modo que
+  `Comanda` **deja de ser uno a uno con la ronda**: todo reporte que cuente comandas tiene que saberlo.
+  La comanda nacida terminada **sí tiene autor** —el mesero que la envió—, a diferencia de la de cocina:
+  hay dos clases de escritura de inventario y la auditoría por persona cubre solo una (ADR-0026).
+- **`ItemComanda`** — comanda, **siempre un plato — nunca un combo** (ADR-0029), `precio_unitario_snapshot`,
+  `combo_origen` (FK, nulo si es venta directa) y `combo_descripcion` (snapshot del nombre), estado
+  (`pendiente` | `listo` | `anulado` | `sin_insumo`), `listo_en`, `motivo`. **Una fila por unidad:
+  `cantidad` es siempre 1.** Dos ceviches en la misma orden son dos filas.
+  Es la decisión de modelo que sostiene todo el flujo de cocina (ADR-0016): el cocinero marca y deshace
+  **cada unidad**, y la anulación del PRD también es por unidad. La alternativa —una línea con
+  `cantidad`, `cantidad_anulada` y `cantidad_preparada`— exige mantener a mano el invariante
+  `anuladas + listas ≤ cantidad`, y ese es exactamente el tipo de invariante que alguien rompe. Con una
+  fila por unidad no hay nada que romper: un estado por fila y listo.
+  Costo: más filas. Una orden de restaurante tiene unidades, no miles, así que no es un problema real.
+  La cuenta y el pedido **muestran las unidades agrupadas** —"2 Ceviche clásico"— porque agrupar es
+  presentación; el KDS las muestra separadas porque ahí cada una se toca.
+  El ítem anulado o sin insumo **no se borra**: queda tachado en la cuenta.
+- **`EventoOperacion`** — secuencia monotónica, tipo, payload, fecha. Alimenta el canal SSE y sostiene
+  la reanudación del KDS.
+
+### Dinero
+
+- **`Venta`** — cuenta, **`turno`**, `cerrada_en`, `total_neto`, `total_igv`, `total_bruto`, **mesero de
+  la cuenta**. Neto e IGV se guardan separados porque la estación los muestra desglosados al cobrar
+  (`DESIGN.md`) y porque la comisión se calcula sobre el neto. El vínculo a `Turno` es lo que hace
+  computable el cierre: sin él, "ventas en efectivo de este turno" habría que deducirlo de un rango de
+  horas, y un rango a mano no sobrevive a un turno que se estira. Las propinas heredan el turno por su
+  venta, así que no necesitan el campo.
+- **`ItemVenta`** — snapshot inmutable (ADR-0004): descripción, `precio_unitario_neto`, `igv_unitario`,
+  cantidad, **`costo_fifo_snapshot`**, `combo_origen` y `combo_descripcion`. Nunca se recalcula.
+  **Un combo vendido produce una fila por componente y ninguna fila propia** (ADR-0029), con el precio ya
+  repartido proporcional a los precios de lista del momento. Por eso `SUM(ItemVenta)` da el total de la
+  venta **sin excluir nada**: el doble conteo es imposible, no improbable. El comprobante y la cuenta
+  reagrupan por `combo_origen` para mostrar el combo — agrupar es presentación.
+  **Residuo del reparto:** se trunca cada componente y el sobrante se asigna de a un céntimo en orden
+  descendente de precio de lista, con empate por id de plato. La suma cierra por construcción.
+- **`Pago`** — venta, método (`efectivo` | `pos`), `pos_operador` opcional
+  (`niubiz` | `yape` | `otro`), monto, si es parcial, comensal opcional. Dos ejes y no uno porque los
+  dos consumidores piden cosas distintas: el **cierre de turno** necesita exactamente dos baldes
+  —efectivo contra POS, porque solo el efectivo se entrega físicamente— y el **dashboard** necesita el
+  detalle por operador para "ventas por método de pago". Colapsarlos en una sola lista obligaría al
+  cierre a saber cuáles de esos valores son "de tarjeta". Soporta la división de cuenta sin
+  restricciones, por ítem o por monto.
+- **`Propina`** — venta, **mesero**, monto, origen (`efectivo` | `pos`), estado
+  (`pendiente` | `liquidada`). El origen importa y ahora decide quién tiene la plata: la propina en
+  efectivo ya está **en el bolsillo del mesero** al cierre y se descuenta de lo que entrega; la de POS
+  entró a la cuenta del negocio y se le liquida después. No atraviesa el estado de resultados.
+- **`LiquidacionPropina`** — mesero, monto, fecha.
+- **`Comision`** — venta, mesero, `base_neta`, monto. Calculada al cerrar la venta y congelada.
+- **`Comprobante`** — venta, tipo (`boleta` | `factura`), serie, correlativo, estado, y los datos del
+  receptor **según el tipo**: `boleta` acepta DNI, nombre y dirección; `factura` **exige** RUC, razón
+  social y dirección fiscal. Los campos y su obligatoriedad salen del prototipo validado de la
+  estación, que ya distingue los dos formularios. Modelado como entidad de primera clase aunque la v1
+  no emita, para que un emisor futuro no obligue a rediseñar ventas ni reportes.
+- **`CierreTurno`** — turno, mesero, `ventas_efectivo`, `ventas_pos`, `propinas_efectivo`,
+  `propinas_pos`, `a_entregar`, `cerrado_en`. **Reemplaza al `Arqueo`** (PRD v1.2): no hay
+  `efectivo_esperado` contra `efectivo_real` ni diferencia, porque sin caja central no hay fondo que
+  contar ni vuelto centralizado. `a_entregar = (ventas_efectivo + propinas_efectivo) − propinas_efectivo`,
+  que es idéntico a `ventas_efectivo`; se persiste igual —y no se deriva— porque es la cifra que el
+  mesero firma al entregar el dinero, y un cambio posterior de la fórmula no debe reescribir un cierre
+  ya hecho. Los cuatro subtotales se guardan porque el prototipo los muestra como líneas expandibles
+  por mesa.
+- **`PerdidaPorAnulacion`** — ítem anulado tras preparación, `costo_fifo`, motivo. Línea propia del
+  margen de contribución.
+
+## Criterios de aceptación por flujo
+
+### Acceso: dispositivo, persona y llave de servicio (ADR-0031)
+
+- [ ] Cada una de las 5 pantallas se **enrola una vez** desde `/admin` y recibe un token de dispositivo; el token se muestra **una sola vez** y se persiste hasheado.
+- [ ] El token viaja en cookie `httpOnly` de larga duración, que `EventSource` envía sola: **la suscripción al canal SSE no requiere headers ni sesión de persona**.
+- [ ] Una suscripción al stream **sin dispositivo enrolado se rechaza**. Ninguna de las 5 vistas recibe eventos sin credencial de dispositivo.
+- [ ] El dispositivo **no autoriza ninguna acción**: marcar, vender, cobrar, abrir o cerrar el servicio y gestionar exigen su propia capa. Un dispositivo enrolado que intente escribir sin la capa que corresponde **falla en el servidor**.
+- [ ] Revocar un dispositivo desde `/admin` **corta su stream** sin afectar a los demás.
+- [ ] **`/admin` entra con usuario y contraseña**, hasheada con KDF de memoria dura (Argon2id o bcrypt); nunca con PIN y nunca con un hash rápido. La sesión vive en cookie `httpOnly` y expira a los **60 minutos de inactividad**.
+- [ ] El **PIN de cocina son 6 dígitos** y solo se pide al abrir y cerrar el servicio (ADR-0018). El del mesero sigue siendo de 4 (ADR-0014).
+- [ ] **5 intentos fallidos bloquean el dispositivo 60 s**, y cada bloqueo siguiente duplica la espera con tope de 15 min. Un acierto reinicia el contador.
+- [ ] El bloqueo es **por dispositivo, no por cuenta**: una estación bloqueada **no afecta a las otras dos**, y ninguna cuenta queda inutilizable desde otra pantalla.
+- [ ] El bloqueo alcanza **solo al pedido de PIN o contraseña**. **Marcar unidades en cocina nunca se bloquea**: un lockout no puede dejar a la cocina sin poder cocinar.
+- [ ] Ni el PIN ni la contraseña revelan si el valor existe: el error es el mismo para inválido y para inexistente.
+
+**Arranque del sistema (ADR-0031)**
+
+- [ ] La migración inicial crea **un administrador y nada más**: su contraseña se genera al sembrar, se muestra **una sola vez** y **debe rotarse en el primer ingreso**.
+- [ ] No se siembra ninguna `CredencialCocina` ni ningún `Dispositivo`: los define el administrador.
+- [ ] La **revisión de pendientes** lista *PIN de cocina sin definir* y *ningún dispositivo enrolado*, junto a los platos sin receta y los insumos sin compras.
+- [ ] Desde una base vacía, el escenario simulado del PRD **recorre el ciclo completo sin ninguna intervención manual fuera del sistema**.
+
+### Identificación y toma de pedido
+
+- [ ] Un PIN válido abre sesión; uno inválido muestra badge `critical` con icono y texto, sin revelar si el PIN existe.
+- [ ] La sesión se cierra automáticamente al enviar la comanda a cocina y tras el periodo de inactividad configurado.
+- [ ] Confirmar un pedido con la sesión expirada falla y no crea comanda.
+- [ ] La comanda registra mesa, mesero que la tomó y hora, y queda asociada a **la cuenta propia** del mesero en esa mesa.
+- [ ] Una segunda ronda sobre la misma cuenta crea una comanda nueva y acumula en la misma cuenta.
+- [ ] Con la estación sin conexión, el envío se bloquea con aviso y no queda nada en cola local.
+
+**Turno y horas efectivas (ADR-0020)**
+
+- [ ] La pantalla de PIN ofrece **marcar ingreso**, que abre el turno con `origen_apertura = marcado` sin necesidad de tomar ningún pedido.
+- [ ] Si el mesero no marcó ingreso, su **primer login del día** abre el turno con `origen_apertura = primer_login`. Nunca hay actividad sin turno.
+- [ ] Un mesero que entra, no toma ningún pedido y no cobra nada **igual tiene turno abierto y horas efectivas**. Un turno sin ninguna venta es un turno válido.
+- [ ] Un mesero con turno abierto no abre un segundo turno: la acción de marcar ingreso no se ofrece.
+- [ ] Las horas efectivas de un turno son `cerrado_en − abierto_en`, y un turno sin cerrar **no reporta horas**: se muestra como turno abierto, no como cero ni como un número que sigue creciendo en un reporte.
+- [ ] Cerrar sesión en la estación **no** cierra el turno ni corta las horas.
+
+**Turno sin cerrar (ADR-0024)**
+
+- [ ] Un mesero con un turno abierto de una fecha anterior **entra con normalidad** y se le abre un turno nuevo. Nada lo bloquea ni lo obliga a resolver el anterior.
+- [ ] Los turnos abiertos de fechas anteriores aparecen en la **bandeja del administrador**, con contador en la navegación.
+- [ ] Al cerrar uno, el sistema **propone** `cerrado_en_propuesto` = hora de la última actividad de ese mesero, y el administrador puede aceptarla o corregirla.
+- [ ] Cerrar sin motivo **falla**: `motivo_cierre_tardio` es obligatorio cuando cierra el administrador.
+- [ ] Una hora de cierre **posterior al `abierto_en` del siguiente turno del mismo mesero se rechaza**, con el motivo explicado: dejaría dos turnos superpuestos y las horas dejarían de ser sumables.
+- [ ] El `CierreTurno` resultante se marca como **no firmado por el mesero** y se muestra distinto del firmado, en la bandeja y en el dashboard.
+- [ ] Ningún reporte de horas ni de efectivo suma cierres firmados y cierres tardíos sin distinguirlos.
+
+**Cambio de mesa y fusión de cuentas (ADR-0025)**
+
+- [ ] Mover una cuenta a otra mesa arrastra **todos** sus ítems y comandas, y escribe `mesa_anterior` y `mesa_cambiada_en`.
+- [ ] La mesa de origen vuelve a **libre sola** si no le quedan otras cuentas: no hay ninguna acción de liberar.
+- [ ] Mover una cuenta a una mesa donde ese mesero **ya tiene** una cuenta abierta se ofrece como **fusión**, no como error.
+- [ ] El KDS muestra la mesa nueva **con la anterior tachada al lado** en toda comanda **pendiente** cuya `mesa_en_creacion` difiere de la mesa efectiva de su cuenta (ADR-0027). Una orden terminada no se re-etiqueta.
+- [ ] **La misma regla cubre la fusión**, sin ningún caso especial: las comandas absorbidas pasan a la cuenta sobreviviente, su mesa efectiva cambia, y el KDS las tacha igual que en un movimiento.
+- [ ] Una cuenta movida **dos veces** (6 → 5 → 9) sigue mostrando **6** como mesa tachada, no 5: el snapshot no se pisa.
+- [ ] Una cuenta `fusionada` **no cuenta para el estado de la mesa** ni ocupa el índice único: la mesa de origen vuelve a **libre** y ese mesero puede abrir una cuenta nueva ahí.
+- [ ] La cuenta absorbida **conserva su `mesa`**: el sistema puede decir en qué mesa se abrió y se atendió, aunque sus comandas hayan pasado a otra.
+- [ ] Toda consulta de cuentas abiertas usa `estado IN (abierta, en_cobro)` — **lista blanca, nunca `<> cerrada`** (ADR-0027).
+- [ ] El cambio llega al KDS en **≤ 3 segundos**, el mismo presupuesto que una comanda nueva.
+- [ ] Fusionar dos cuentas **del mismo mesero** conserva ítems, comandas y el `abierta_en` más antiguo; la absorbida queda en `fusionada` con su `fusionada_en`.
+- [ ] Fusionar cuentas de **meseros distintos falla en el servidor**, no solo en la interfaz.
+- [ ] Una cuenta `fusionada` **no aparece** en cuentas abiertas, ni en el cierre de turno, ni en ningún total del dashboard.
+- [ ] Una cuenta `en_cobro` o `cerrada` no se puede mover ni fusionar.
+
+### Concurrencia entre estaciones
+
+- [ ] Dos meseros abren cuenta en la misma mesa desde estaciones distintas y se crean **dos cuentas independientes**. Ninguna acción falla y no hay bloqueo, aviso de conflicto ni toma forzada.
+- [ ] Un mesero **no ve** los ítems ni el total de la cuenta de otro, y la interfaz no le ofrece ninguna acción sobre ella.
+- [ ] Cobrar o editar la cuenta de otro mesero **falla en el servidor**, no solo en la interfaz: la autorización se resuelve contra `Cuenta.mesero`, no contra la mesa.
+- [ ] Un mesero no puede tener dos cuentas abiertas en la misma mesa: la segunda apertura cae sobre la existente para agregar o cobrar.
+- [ ] La mesa figura **ocupada** mientras tenga al menos una cuenta no cerrada, y vuelve a **libre** solo cuando se cierra la última.
+- [ ] Cobrar una de dos cuentas de la misma mesa **no** libera la mesa.
+- [ ] Comisión, propina y efectivo de una cuenta se atribuyen siempre a su mesero dueño, sin ningún camino alternativo.
+
+### Cocina (KDS)
+
+- [ ] La comanda confirmada aparece en el KDS en ≤ 3 segundos.
+- [ ] El orden es FIFO estricto por hora de creación y ninguna interacción lo reordena.
+- [ ] Con corte de red forzado y 20 comandas emitidas durante el corte, al reconectar se muestran las 20, en orden, sin duplicados.
+- [ ] Reiniciar el proceso del backend durante el corte no cambia el resultado anterior.
+- [ ] El indicador de conexión refleja el estado real (en línea / reanudando / sin conexión).
+- [ ] La pantalla de pared **no pide identificación en ningún momento** y no ofrece ninguna acción que escriba: se abre y queda abierta todo el servicio (ADR-0016).
+- [ ] La pantalla de pared no se desloguea ni se bloquea por inactividad, porque no tiene sesión.
+- [ ] Cada unidad se muestra en su **propia fila**: dos unidades del mismo plato son dos filas, nunca "2 ×". El KDS es la superficie donde cada unidad se toca por separado.
+- [ ] Cada orden muestra mesa, número de pedido, hora, mesero que la tomó y el estado de cada una de sus unidades.
+- [ ] Una orden `pendiente` cuyo `creada_en` excede `ConfiguracionOperativa.umbral_demora_min` se muestra como **demorada** con `warning`, icono de reloj y texto. El estado es **derivado**: nadie lo marca y no existe como campo.
+- [ ] Una orden terminada desaparece de la cola activa y queda consultable en el historial.
+
+### Estación de cocina — marcado en dos pasos
+
+- [ ] La estación **no pide identificación para marcar**: ni al marcar una unidad como lista, ni al deshacerla, ni al terminar una orden, ni al consultar el historial (ADR-0016). El **ciclo del servicio** —abrir y cerrar— es la excepción y sí exige el PIN de cocina (ADR-0018, ver *Apertura del servicio de cocina*).
+- [ ] Iniciar el servicio queda registrado como `ServicioCocina` **sin persona asociada**: el PIN es la llave del servicio y **no identifica a nadie**, así que la fila no lleva autor (ADR-0018).
+- [ ] Con el servicio iniciado, cualquier cocinero marca cualquier unidad de cualquier orden, sin ningún paso previo.
+- [ ] Sin servicio iniciado, la estación **no ofrece marcar** y dice qué falta; no lo muestra deshabilitado sin explicación.
+- [ ] **Paso 1 — unidad lista.** Marcar una unidad como lista **no escribe ningún movimiento de inventario** y guarda `listo_en`.
+- [ ] **Deshacer** devuelve la unidad a `pendiente` y **no escribe nada en el libro de movimientos**: no hay reversa porque no hubo consumo (ADR-0005 sigue append-only sin excepciones).
+- [ ] Deshacer está disponible sobre cualquier unidad lista mientras la orden **no** esté terminada.
+- [ ] **Paso 2 — orden terminada.** La acción de terminar solo se ofrece cuando **todas** las unidades de la orden están resueltas (`listo`, `anulado` o `sin_insumo`).
+- [ ] Terminar la orden escribe **todos** los movimientos de inventario de sus unidades listas, en una sola transacción, y fija su costo FIFO (ADR-0006 refinado por ADR-0016).
+- [ ] Terminar una orden es **irreversible** y no hay deshacer después. La confirmación muestra la orden completa antes de escribir.
+- [ ] Las unidades `anulado` y `sin_insumo` **no generan movimiento de inventario** al terminar la orden.
+- [ ] La orden terminada **no registra autoría**: solo `terminada_en`. Es anónimo por diseño y está declarado como costo, no como omisión.
+
+### Unidad que no se puede preparar
+
+- [ ] La estación permite marcar una unidad como **sin insumo**, con motivo obligatorio. Es la única acción de cocina que no es marcar avance.
+- [ ] La unidad queda `sin_insumo`: no descuenta inventario, no suma a la venta ni a la comisión del mesero.
+- [ ] Se **notifica al mesero de esa mesa** para que pueda hablar con el cliente y ofrecerle algo a cambio.
+- [ ] Se crea una `IncidenciaStock` con origen `sin_insumo_en_cocina`, en la **misma bandeja** del administrador donde caen los desfases de stock.
+- [ ] Una unidad `sin_insumo` cuenta como resuelta: **destraba el cierre de cocina**, que es la razón por la que esta acción existe.
+
+### Historial de órdenes terminadas
+
+- [ ] El cocinero accede desde su estación al historial de órdenes terminadas, sin identificarse.
+- [ ] Cada entrada muestra qué se cocinó unidad por unidad, la mesa, el número de pedido, el mesero que lo tomó y la hora de creación y de terminación.
+- [ ] El historial es **solo lectura**: no permite deshacer, reabrir ni editar una orden terminada.
+- [ ] El historial cubre al menos el servicio en curso; una orden terminada aparece en él inmediatamente después de terminarse.
+
+### Apertura del servicio de cocina
+
+- [ ] Antes del inicio, la pantalla de pared muestra un estado explícito de **cocina sin iniciar**, no una pantalla vacía: vacía, caída y sin iniciar se ven igual y no son lo mismo. **Sin contador de comandas en espera**, porque con el servicio cerrado esa cola no puede existir (ADR-0019).
+- [ ] Abrir el servicio **exige el PIN de cocina**; un PIN inválido no abre nada y no revela si existe (ADR-0018).
+- [ ] Una comanda con algún plato que requiere cocina, enviada **antes** del inicio del servicio, **se rechaza en el servidor** con motivo `servicio_no_abierto` y la lista de ítems que la bloquearon. No se encola ni se persiste nada.
+- [ ] El comportamiento antes de abrir y después de cerrar es **idéntico**: ningún criterio distingue los dos estados.
+- [ ] Iniciado el servicio, la cola aparece completa y en orden FIFO.
+- [ ] Iniciar dos veces no crea dos servicios: si ya hay uno abierto, la acción no se ofrece.
+- [ ] Tras un cierre, volver a abrir el mismo día **crea un `ServicioCocina` nuevo** y el anterior conserva su `cerrado_en`. Es la reapertura excepcional del PRD, y no necesita un estado propio.
+
+### Cierre de cocina
+
+- [ ] La estación ofrece **Cerrar cocina** mientras haya un servicio abierto. La acción pide **confirmación explícita** y después el **PIN de cocina** — dos pantallas, y es la única acción de la estación que las tiene (ADR-0018). El PIN no identifica a nadie: solo encarece la acción que corta la venta de comida de todo el salón.
+- [ ] **Cerrar con órdenes pendientes es imposible**, no una advertencia: la acción queda bloqueada, lista las órdenes que faltan por mesa, y solo se habilita cuando todas están terminadas. Con eso el caso borde del PRD *"comanda que queda sin marcar como preparada al cierre del turno"* **no puede existir**.
+- [ ] **Sin servicio abierto**, el backend **rechaza la comanda entera** si contiene algún plato con `requiere_cocina`, sea de una mesa nueva o de una ronda sobre una cuenta abierta. El rechazo es atómico: no se persiste nada y la cuenta queda intacta (ADR-0019).
+- [ ] El rechazo devuelve un motivo **reconocible por el cliente** (`servicio_no_abierto`) y **qué ítems la bloquearon**, para que la estación pueda ofrecer la salida correcta en vez de un error genérico.
+- [ ] Enviar solo los ítems que no requieren cocina es una **segunda acción explícita del mesero**, no una división automática del servidor. Un envío nunca tiene éxito parcial.
+- [ ] Los platos con `requiere_cocina` en falso **se siguen vendiendo** con la cocina cerrada, y **se puede abrir mesa nueva**: una mesa que solo toma bebida es una venta legítima.
+- [ ] El rechazo ocurre en el **servidor**, no solo en la interfaz: una comanda enviada en el instante exacto del cierre se rechaza igual (ADR-0013).
+- [ ] Con la cocina cerrada, **el cobro de una mesa abierta sigue funcionando**, y también el cierre de turno del mesero. Los dos cierres son independientes y ninguno espera al otro.
+- [ ] La cocina cerrada se refleja en las 3 estaciones en **≤ 5 segundos**, el mismo presupuesto que el plato agotado.
+- [ ] Con la cocina cerrada, la grilla del mesero deshabilita los platos que requieren cocina con motivo visible, y deja habilitados los que no. No oculta: deshabilita, igual que el plato agotado.
+- [ ] **Un servicio por día** como operación normal: abre con el negocio y cierra con el negocio. Cerrar y volver a abrir sigue siendo posible y crea un `ServicioCocina` nuevo — es la reapertura excepcional, no el turno de la cena.
+- [ ] Entre dos servicios del mismo día el comportamiento es idéntico al de la cocina cerrada: no es un estado distinto.
+
+### Contingencia por caída del KDS
+
+- [ ] Si la pantalla de pared queda fuera de servicio, la **estación de cocina** muestra la cola completa en orden FIFO y la cocina completa un servicio entero sin salir de la cocina.
+- [ ] La estación de cocina muestra la cola con la escala tipográfica del KDS, no con la suya de marcado.
+- [ ] Como último recurso, la cola es consultable desde una estación del mesero, con aviso de que esa estación queda ocupada mientras se consulta.
+
+### Inventario y costeo FIFO
+
+- [ ] **Terminar una orden** genera movimientos de salida por cada insumo de la receta de cada una de sus unidades listas. Marcar una unidad como lista **no** genera ninguno (ADR-0016).
+
+**Ítems que no requieren cocina (ADR-0026)**
+
+- [ ] Una comanda **sin ningún ítem** con `requiere_cocina` nace en estado `terminada`, con `terminada_en = creada_en` y sus `ItemComanda` en `listo`.
+- [ ] Esa comanda **escribe sus movimientos FIFO en la misma transacción en que se crea**, por el mismo camino que usa el cierre de una orden de cocina. No existe un segundo camino de escritura de inventario.
+- [ ] Vender una bebida con receta **baja su stock**, y al llegar a cero **dispara el agotado automático** en las 3 estaciones dentro del mismo presupuesto de 5 segundos que cualquier otro plato.
+- [ ] El `costo_fifo_snapshot` de un ítem sin cocina se llena igual que el de un plato de cocina: la bebida **entra** en *platos más rentables* y en la matriz de ingeniería de menú, y **nunca** se reporta con costo cero.
+- [ ] Una comanda nacida `terminada` **no aparece en el KDS** ni en la cola activa, y **no bloquea el cierre de cocina**. No hace falta ningún filtro por `requiere_cocina` en el KDS: la comanda nunca está `pendiente`.
+- [ ] Un pedido **mixto** enviado con la cocina abierta se persiste como **dos comandas** —una sin cocina en `terminada`, una de cocina en `pendiente`—, y el mesero ejecuta **una sola acción** y recibe **un solo resultado**. La división nunca se le muestra como dos envíos.
+- [ ] Si en el mismo envío concurren rechazo y división, **manda el rechazo**: primero se rechaza atómicamente (ADR-0019, nada se persiste) y la división solo se aplica sobre lo que el mesero decida reenviar.
+- [ ] Anular una unidad sin cocina **después de enviada** registra **pérdida por anulación** con su costo FIFO, igual que una unidad de una orden ya terminada. La corrección es un **movimiento de ajuste** desde la bandeja de incidencias; **no** hay reversa (ADR-0005 sigue append-only).
+- [ ] El movimiento de inventario de una comanda sin cocina **queda atribuido al mesero que la envió**. El de una orden de cocina sigue siendo anónimo: son dos clases de escritura y ningún reporte de auditoría puede presentarlas como una sola.
+- [ ] Los movimientos consumen los lotes por `numero_lote` ascendente —el primero registrado primero—; al agotarlo, continúan con el siguiente (ADR-0030).
+- [ ] La `referencia` del movimiento apunta a la **unidad de `ItemComanda`** que lo causó, que es la granularidad más fina disponible y la que hace computable el costo por plato.
+- [ ] El costo de una unidad es la **suma de sus movimientos**, no un costo unitario único: los 180 g de pescado de un ceviche pueden salir 100 g de un lote y 80 g del siguiente, a precios distintos. `ItemVenta.costo_fifo_snapshot` guarda esa suma.
+- [ ] Un lote con crédito fiscal se costea a su precio neto; uno sin crédito fiscal, al precio pagado completo.
+- [ ] Vender un combo genera exactamente los mismos movimientos que vender sus componentes por separado.
+- [ ] Dos órdenes terminadas simultáneamente que consumen el mismo insumo producen movimientos consistentes: la suma consumida es exacta y ningún lote se consume dos veces.
+- [ ] Si el stock no alcanza, la operación se completa igual, el stock queda negativo, se registra una incidencia y el costeo usa el precio del último lote conocido.
+- [ ] Un insumo sin ninguna compra registrada marca el plato como no costeable en vez de asumir costo cero.
+- [ ] El stock de un insumo es siempre igual a la suma de sus movimientos: **no existe un campo de stock**.
+
+### Anulación
+
+- [ ] La anulación es **por unidad**: anular una de dos unidades del mismo plato deja la otra vigente, porque cada unidad es su propia fila de `ItemComanda`.
+- [ ] Anular una unidad de una orden **no terminada** no genera ningún movimiento de inventario.
+- [ ] Anular una unidad de una orden **ya terminada** no revierte los movimientos y registra una pérdida por anulación con su costo FIFO.
+- [ ] Ninguna unidad anulada suma a la venta ni a la comisión del mesero.
+- [ ] La unidad anulada **no se borra**: queda tachada en la cuenta, con forma además de color.
+- [ ] El KDS recibe la anulación y la muestra tachada con icono, no solo en color.
+- [ ] Una anulación ocurrida durante un corte del KDS aparece ya anulada al reconectar, nunca como pendiente.
+
+### Disponibilidad
+
+- [ ] Al llegar a cero el stock de cualquier insumo de una receta, sus platos quedan no disponibles con motivo `automatico`.
+- [ ] El administrador puede marcar y desmarcar disponibilidad con motivo `manual`.
+- [ ] Un cambio de disponibilidad se refleja en las 3 estaciones en ≤ 5 segundos.
+- [ ] Un combo queda no disponible en cuanto cualquiera de sus componentes lo está.
+- [ ] El plato agotado se muestra deshabilitado en la grilla, no oculto.
+- [ ] Con la cocina cerrada, un plato con `requiere_cocina` se deshabilita con **motivo propio** —cocina cerrada, no agotado— porque son dos causas distintas y el mesero necesita saber cuál es: una se resuelve reponiendo stock y la otra no se resuelve hoy.
+
+### Cobro
+
+- [ ] El cobro se inicia con **Cobrar mesa** desde la pantalla del pedido, sin cambiar de estación ni de usuario.
+- [ ] La cuenta indica boleta o factura y queda registrada como comprobante sin emitir; una `factura` sin RUC y razón social no se puede grabar.
+- [ ] Cada cobro almacena venta neta e IGV por separado, y la estación los muestra desglosados.
+- [ ] Registrar un pago exige método elegido y comprobante grabado; si falta cualquiera de los dos, la confirmación queda bloqueada.
+- [ ] Un pago en efectivo con monto recibido menor al total no se puede confirmar; si excede, la diferencia se ofrece como propina o como vuelto, nunca como venta.
+- [ ] La división de cuenta funciona por ítem y por monto, y ningún comensal puede exceder el saldo pendiente.
+- [ ] Antes de cerrar la venta se muestra un resumen (total, método, propina, vuelto) y se exige confirmación explícita del mesero.
+- [ ] La propina de un pago dividido se acumula una sola vez por venta, no una por comensal.
+- [ ] La suma de pagos parciales se compara contra el total, con badge `warning` mientras no cierre.
+- [ ] Todo monto por encima del total se registra como propina del **mesero dueño de la cuenta**, con su origen, y nunca suma a la venta.
+- [ ] La propina no aparece en el margen de contribución ni en la utilidad.
+- [ ] Al confirmar el pago la mesa se libera, la venta se cierra y se calcula la comisión sobre el neto.
+- [ ] La venta cerrada conserva su costo: modificar una receta o un precio después no cambia ninguno de sus valores.
+
+### Cobros realizados del turno
+
+- [ ] El mesero consulta la lista de mesas que **él** cobró en el turno en curso, no las de otros meseros.
+- [ ] Abrir una mesa cobrada muestra su detalle de consumo (ítems, cantidades, total) sin permitir modificarla.
+
+### Cierre de turno
+
+- [ ] El cierre consolida cuatro subtotales del turno del mesero: ventas en efectivo, ventas por POS, propinas en efectivo y propinas por POS.
+- [ ] Cada subtotal se expande al detalle por mesa.
+- [ ] **Ventas del turno** se muestran sin propinas: el dinero del mesero y la venta del negocio nunca se suman en la misma cifra.
+- [ ] `a_entregar = efectivo recolectado − propinas en efectivo`, y en un turno simulado con al menos 5 propinas en efectivo coincide **exactamente** con las ventas en efectivo del mesero.
+- [ ] No se calcula ni se pide efectivo contado, ni fondo inicial, ni diferencia de arqueo.
+- [ ] **Cerrar turno con cuentas propias en `abierta` o `en_cobro` es imposible**, no una advertencia: la acción queda bloqueada y lista las cuentas que faltan cobrar, con acceso directo a cada una. Una cuenta con cobro parcial cuenta como abierta.
+- [ ] El bloqueo mira **solo las cuentas del propio mesero**: las de otro mesero en la misma mesa no lo afectan.
+- [ ] El cierre de turno escribe `Turno.cerrado_en` y con eso **cierra las horas efectivas** (ADR-0020), además de consolidar el dinero.
+- [ ] El cierre de turno termina la sesión en la estación (ADR-0014).
+
+### Gestión — menú, combos y recetas
+
+- [ ] El precio se ingresa **neto**; el precio de carta con IGV y el margen por unidad se derivan y se muestran antes de guardar.
+- [ ] Un plato sin receta, o con algún insumo sin ninguna compra registrada, queda **no costeable**: no se asume costo cero y no entra en "platos más rentables".
+- [ ] No se pueden crear dos platos con el mismo nombre, ni guardar un precio neto menor o igual a cero.
+- [ ] Dar de baja un plato que integra un combo **se bloquea**, y se listan los combos afectados con la salida concreta (quitarlo del combo o marcarlo no disponible).
+- [ ] Dar de baja un plato no altera ninguna venta cerrada: su `ItemVenta` conserva descripción, precio y costo FIFO (ADR-0004).
+- [ ] Cambiar el precio de un plato con cuentas abiertas se advierte, y el precio nuevo aplica solo a rondas futuras: los ítems ya tomados conservan su `precio_unitario_snapshot`.
+- [ ] Guardar una receta muestra el margen resultante contra el margen guardado, con la diferencia por unidad.
+- [ ] Una receta no se guarda con líneas en cantidad cero, ni con el mismo insumo repetido.
+- [ ] Guardar una receta no recalcula ninguna venta cerrada, y el aviso lo dice explícitamente.
+- [ ] La disponibilidad manual y la automática se distinguen por `motivo_no_disponible`, y el administrador puede revertir solo la manual.
+- [ ] `requiere_cocina` se guarda como lo marcó el administrador: **ninguna regla lo deriva** de la categoría ni de la existencia de receta.
+- [ ] Un plato nuevo arranca con `requiere_cocina` en verdadero: el default seguro es que necesite cocina, porque equivocarse hacia el otro lado lo deja vendiéndose con la cocina cerrada.
+
+### Gestión — compras y lotes FIFO
+
+- [ ] Registrar una compra crea un lote con su cantidad, precio pagado, marca de crédito fiscal y fecha.
+- [ ] Con crédito fiscal el lote se costea **neto**; sin crédito fiscal, al **precio pagado completo**. La diferencia se muestra como monto antes de confirmar, no como texto.
+- [ ] Al cambiar la marca de crédito fiscal, el costo unitario del lote y el costo de entrada al inventario se recalculan a la vista.
+- [ ] Una compra con fecha anterior a consumos ya realizados **se advierte, y el aviso dice lo contrario de lo que decía antes**: el lote entra **al final de la cola de consumo** y su fecha es informativa (ADR-0030). Ningún consumo ya escrito se altera.
+- [ ] **El libro es reconstruible en cualquier momento:** aplicar la regla de consumo sobre los movimientos escritos devuelve exactamente lo que está escrito, incluso después de registrar compras retroactivas. Es lo que hace verificable el criterio de éxito del costeo manual.
+- [ ] No se registra una compra con cantidad o precio menor o igual a cero, ni con fecha futura.
+- [ ] El orden de consumo FIFO es **por `numero_lote`, y por nada más** — un orden total por sí solo, sin clave compuesta ni desempate (ADR-0030). `Compra.fecha` **no** participa.
+- [ ] El saldo de un lote es su cantidad menos las salidas que lo referencian, y nunca puede superar su cantidad.
+
+### Gestión — inventario, mermas e incidencias
+
+- [ ] Un insumo nuevo arranca sin compras y deja no costeable a todo plato que lo use, hasta registrar su primer lote.
+- [ ] La unidad base de un insumo no se puede cambiar después de creado.
+- [ ] Registrar una merma exige motivo, consume lotes FIFO y muestra el costo que da de baja antes de confirmar.
+- [ ] Una merma que excede el stock se registra igual, deja el stock negativo y lo advierte: el libro ya venía desalineado del físico.
+- [ ] La merma **registrada** y el `pct_merma` **estimado** son magnitudes distintas y nunca se suman entre sí.
+- [ ] La bandeja de incidencias muestra las ventas que se completaron con stock insuficiente, con su faltante y su origen, y es una cola de trabajo con contador visible en la navegación.
+- [ ] Regularizar por **ajuste** agrega un movimiento de ajuste sin costo, no una compra: no inventa un costo que nadie pagó.
+- [ ] Regularizar no reescribe la venta que originó la incidencia.
+
+### Gestión — estructura de costos
+
+- [ ] Guardar **crea una versión nueva** con fecha de vigencia; no edita la vigente.
+- [ ] Un periodo ya reportado da idéntico resultado antes y después de crear una versión nueva.
+- [ ] Antes de guardar se muestra el efecto sobre el margen sumado de los platos costeables, con la diferencia.
+- [ ] Los porcentajes de comisión, merma e IGV se rechazan si son negativos o mayores que 100.
+- [ ] Los sueldos fijos de meseros no se cargan acá: salen de cada `Persona`, y el total mensual los suma.
+
+### Gestión — personal y liquidación de propinas
+
+- [ ] Los roles disponibles son exactamente `mesero`, `cocina` y `administrador`. **No existe `cajero`.**
+- [ ] El PIN son exactamente 4 dígitos, y **dos personas no pueden compartir PIN**: un PIN duplicado rompe la atribución de ventas, comisiones y propinas.
+- [ ] Al regenerar un PIN se muestra una sola vez y se persiste su hash, nunca el PIN.
+- [ ] Una persona no se borra, se **desactiva**: sus ventas, comisiones y propinas la referencian.
+- [ ] Desactivar a un mesero con propinas pendientes se advierte con el monto: la deuda no se cancela al desactivarlo.
+- [ ] Solo se liquidan las propinas de origen `pos`. Las de origen `efectivo` ya se descontaron del `a_entregar` de su cierre de turno, y liquidarlas otra vez sería pagarlas dos veces.
+- [ ] Liquidar marca las propinas como `liquidada`, deja el saldo por POS en cero y registra una `LiquidacionPropina` con su fecha.
+- [ ] La liquidación no toca el estado de resultados: las propinas no son ingreso ni gasto.
+
+### Gestión — calendarios, parámetros y completitud
+
+- [ ] El **calendario de horarios** programa personas por fecha y hora, y muestra las horas programadas por persona y por semana. No marca asistencia y no define días operativos.
+- [ ] El **calendario de apertura** se carga como patrón semanal más excepciones fechadas, y muestra cuántos días operativos tiene el mes resultante — el divisor a la vista, no escondido en el cálculo.
+- [ ] Guardar un calendario de apertura con `vigente_desde` en el pasado **falla**, con el motivo explicado: reescribiría períodos ya reportados (ADR-0022).
+- [ ] La pantalla de **parámetros del sistema** edita IGV, % de comisión, % de merma estimada y umbral de comanda demorada, en un solo lugar, mostrando desde cuándo rige cada cambio.
+- [ ] El administrador define y **rota el PIN de cocina** desde gestión; la rotación no invalida el servicio en curso.
+- [ ] La **revisión de pendientes** lista lo que quedaría incompleto: platos sin receta, insumos sin ninguna compra registrada, y platos sin `requiere_cocina` definido. Es una vista de trabajo, no un bloqueo de navegación.
+- [ ] Ningún formulario de gestión guarda un registro incompleto: la validación es en el campo y en el momento, no un resumen al final.
+
+### Redondeo y exactitud monetaria (ADR-0032)
+
+- [ ] La función de redondeo es **una sola en todo el sistema**: al céntimo más cercano, medio hacia arriba. No hay ningún cálculo de dinero con otra.
+- [ ] **Reparto (hay un total que respetar):** se trunca cada parte, y el residuo se asigna de a un céntimo en orden determinista hasta agotarlo. La suma de las partes da el total, **diferencia 0**, por construcción.
+- [ ] Los tres repartos del sistema son: precio de combo entre sus platos (orden: precio de lista descendente, empate por id — ADR-0029), costo fijo mensual entre días operativos (orden: día operativo ascendente), y costo del lote entre sus consumos (lo absorbe el movimiento que **agota** el lote).
+- [ ] **Porcentaje (no hay total que respetar):** se aplica medio-arriba en la fila más fina donde el importe se persiste, y todo nivel superior es una **suma** de esos enteros. **Ningún reporte recalcula un porcentaje sobre un agregado.**
+- [ ] El IGV se redondea **por unidad** en `ItemVenta.igv_unitario`; `Venta.total_igv` es su suma. La comisión, **por venta**, en `Comision.monto`. La merma estimada, **por `ItemVenta`**, sobre su `costo_fifo_snapshot`.
+- [ ] La **merma estimada no se aplica** sobre las mermas registradas ni sobre las pérdidas por anulación: esas ya son pérdidas medidas, y estimarles merma encima contaría dos veces la misma plata.
+- [ ] **No existe ningún costo unitario de insumo persistido.** El costo de un movimiento es `redondear(cantidad × costo_costeado_lote / cantidad_lote)`, y el movimiento que agota el lote toma el saldo monetario restante.
+- [ ] **La suma de los costos de los movimientos de un lote agotado es exactamente su `costo_costeado_total`**, diferencia 0, en un lote consumido por al menos 5 movimientos con cantidades distintas.
+- [ ] Un insumo cuyo costo por unidad base es **menor a un céntimo** se costea sin pérdida de precisión: 180 g de un lote de 1200 g a S/ 50,00 cuestan **750**, no 720.
+- [ ] El caso sin lote disponible (stock negativo) usa la misma proporción sobre el último lote conocido, y como no hay lote que cerrar, no hay residuo que absorber.
+- [ ] `Compra.costo_costeado_total` se calcula y persiste **al registrar la compra**. Una vigencia nueva de `pct_igv` **no cambia** el costo de ningún lote ya registrado.
+
+### Dashboard
+
+- [ ] El margen por plato es igual al precio neto menos el costo FIFO registrado, más la merma estimada.
+- [ ] Los platos más vendidos incluyen las unidades vendidas dentro de combos.
+- [ ] El precio de un combo se reparte entre sus componentes proporcional a sus precios de lista.
+
+**Combos (ADR-0029)**
+
+- [ ] Vender un combo crea **una fila de `ItemVenta` por componente y ninguna fila del combo**. `SUM(ItemVenta)` da el total de la venta **sin excluir nada**.
+- [ ] La suma de los repartos es **exactamente** el precio neto del combo: se trunca cada componente y el residuo se asigna de a un céntimo en orden descendente de precio de lista, empate por id de plato. Diferencia 0.
+- [ ] `ItemComanda` referencia **siempre un plato, nunca un combo**. Un combo de tres platos genera tres unidades marcables por separado: se puede marcar una lista, anular otra y declarar la tercera *sin insumo*.
+- [ ] *Platos más vendidos* se calcula contando filas por plato, **sin leer `ComboItem`**. Las unidades vendidas dentro de combos entran solas.
+- [ ] *Platos más rentables* usa el precio repartido y el `costo_fifo_snapshot` **ya congelados en la fila**, sin leer `Combo` ni `ComboItem` vivos.
+- [ ] **Editar la composición de un combo no altera ninguna venta cerrada**: un reporte de un período pasado da idéntico resultado antes y después del cambio.
+- [ ] El comprobante y la cuenta **reagrupan por `combo_origen`** y muestran "1 Combo Familiar" con su precio, no tres líneas sueltas.
+- [ ] Un combo que contiene algún plato con `requiere_cocina` genera unidades que requieren cocina, y la puerta de ADR-0019 las ve **sin ninguna regla adicional**: son filas de plato como cualquier otra.
+- [ ] La comisión por mesero es reproducible a mano: `fijo + 5% de su venta neta cobrada`, diferencia 0.
+- [ ] Las propinas aparecen aparte de la comisión, con su saldo pendiente de liquidar.
+- [ ] El margen de contribución es igual a `ventas netas − insumos − merma − pérdidas por anulación − comisiones`, diferencia 0, **en los tres períodos**.
+- [ ] El margen de contribución se muestra como **línea propia**, arriba de la utilidad. La utilidad se rotula **estimada**; el margen no, porque no lleva ninguna imputación adentro.
+
+**Día operativo (ADR-0028)**
+
+- [ ] Una venta del domingo a las 00:30 pertenece al día operativo del **sábado**, y una de las 05:01 al del domingo. La definición está arriba, en *Modelo de datos*.
+- [ ] `Turno`, `ServicioCocina`, `CalendarioApertura`, el estado de resultados y la analítica horaria usan **la misma** función `dia_operativo()`. Ninguna consulta de reporte usa la fecha civil cruda.
+- [ ] El `patron_semanal` del `CalendarioApertura` se lee sobre días operativos: *"abre los sábados"* es la jornada que arranca el sábado a las 05:00.
+- [ ] Un servicio de cocina que abre el sábado a las 11:00 y cierra el domingo a la 01:00 es **un solo `ServicioCocina`**, dentro de **una sola** jornada.
+- [ ] Un mesero que cierra turno a las 00:30 y vuelve a loguearse a las 00:45 **abre un turno nuevo**: *"un turno por jornada"* describe la operación normal, no una restricción de unicidad. Lo que sigue prohibido es que dos turnos del mismo mesero **se superpongan**.
+- [ ] Los días operativos **particionan el tiempo**: todo instante pertenece a exactamente una jornada, sin huecos ni solapes. De ahí que la suma de los días siga dando el mes exacto.
+- [ ] Un mes es un **conjunto de jornadas**, no un rango de fechas: enero termina el 1 de febrero a las 04:59, y una venta del 1 de febrero a las 00:30 cuenta en enero.
+- [ ] El eje horario de un día operativo va de **05:00 a 04:59**, no de 00:00 a 23:59: con el eje civil la franja nocturna quedaría partida entre dos días.
+- [ ] `vigente_desde` de `ConfiguracionCostos` y `CalendarioApertura` se compara contra el **día operativo en curso**, no contra la fecha civil del servidor.
+
+**Estado de resultados y prorrateo (ADR-0021, ADR-0022)**
+
+- [ ] El costo fijo diario es `ConfiguracionCostos vigente / días operativos del mes`, y los días operativos salen del `CalendarioApertura`, **no** de las ventas ni de los horarios programados.
+- [ ] **La suma de los estados de resultados diarios de un mes es exactamente igual al mensual.** Idem la suma de sus semanas. Sin diferencias de redondeo acumuladas.
+- [ ] **El costo fijo imputado de un mes completo suma el 100%** del costo fijo vigente para ese mes, ni más ni menos.
+- [ ] Un día **no operativo según el calendario** no recibe costo fijo. Un día operativo **sin ventas** sí lo recibe.
+- [ ] Una semana a caballo de dos meses toma, para cada día, el costo diario **del mes al que ese día pertenece**.
+- [ ] `ConfiguracionCostos.vigente_desde` y `CalendarioApertura.vigente_desde` **rechazan fechas pasadas**: un período ya reportado no puede cambiar y **no existe ninguna acción de cerrar día, semana ni mes**.
+- [ ] Un período calculado sin configuración de costos vigente **se señala como incompleto**, y no reporta una utilidad con un cero adentro.
+
+**Analítica operativa (ADR-0023)**
+
+- [ ] El tiempo de cocina de una orden es `Comanda.terminada_en − Comanda.creada_en`, y el % de demoradas usa el mismo `creada_en` contra `umbral_demora_min`.
+- [ ] La rotación de mesa es `Cuenta.cerrada_en − Cuenta.abierta_en`, por mesa y por franja horaria.
+- [ ] La curva de **ventas por hora** usa `Cuenta.abierta_en` —la hora del consumo— y no `Venta.cerrada_en`, que es la hora del pago.
+- [ ] `Cuenta.cerrada_en` y `Venta.cerrada_en` se escriben en la **misma transacción** del cobro y coinciden siempre; hay una prueba que lo verifica.
+- [ ] La matriz de ingeniería de menú cruza unidades vendidas contra margen real, y ubica cada plato en uno de los cuatro cuadrantes con umbrales visibles, no ocultos en el código.
+- [ ] Ningún reporte del dashboard consulta `EventoOperacion`: ese registro es para tiempo real y reanudación, y sigue siendo purgable sin afectar reportes.
+- [ ] Ningún gráfico usa dos escalas verticales.
+- [ ] Todo gráfico que use los slots 3, 4 o 5 de la paleta en modo claro lleva etiquetas directas visibles o vista de tabla.
+
+## Riesgos técnicos abiertos
+
+- **ADR-0006 modificó el PRD, y el PRD ya lo refleja** (v1.3): el pago alimenta comisiones y reportes, y el inventario se descuenta al terminar la orden en cocina. Riesgo remanente, y es de personas: cualquiera que haya leído una versión previa del PRD tiene el modelo mental equivocado, y el error es silencioso — se manifiesta como un stock que no baja cuando esperaba que bajara.
+- **Reconciliación entre consumo y venta.** Al separarse en el tiempo, un plato preparado y nunca cobrado descuenta stock sin generar venta. Hace falta un reporte que reconcilie ambos lados; hoy solo existe la pérdida por anulación, que cubre el caso explícito pero no el olvido.
+- **Parámetros sin valor.** El de inactividad de sesión (ADR-0014) y el umbral de comanda demorada siguen sin definir, con un rango estrecho entre "molesta" y "no protege". Se fijan con uso real, que este proyecto no va a tener. El bloqueo de mesa dejó de ser un problema: desapareció con ADR-0012.
+- **La hora de cierre tardío es un dato que el administrador escribe a mano** (ADR-0024). La traza registra quién la puso y contra qué valor propuesto, pero el sistema no puede validar la realidad: una hora que no ocurrió queda mal y parece bien. Es control por auditoría, no por imposibilidad. Y hasta que el administrador cierre esos turnos, el contraste entre horas programadas y efectivas de ese período no cierra.
+- **La rotación de mesas pierde precisión con los cambios de mesa** (ADR-0025). Una cuenta que se movió acumula todo su tiempo en la mesa destino, así que esa mesa se ve más lenta y la de origen no registra nada. Se degrada justo en las noches movidas, que son las que uno querría analizar.
+- **El calendario de apertura mal cargado desplaza toda la utilidad, en silencio.** Si declara 30 días operativos y el local abre 26, el costo fijo diario queda 13% bajo y cada día se ve más rentable de lo que es (ADR-0021). Los totales del mes siguen cerrando, así que el error no se delata por ningún lado. Es el mismo riesgo de disciplina de carga que el PRD ya declara para recetas y compras.
+- **Corrección hacia atrás imposible por diseño.** Con vigencia solo hacia adelante (ADR-0022), un porcentaje o un calendario cargados mal en julio no se pueden arreglar en septiembre. Es coherente con los snapshots inmutables, pero es una limitación real que la interfaz tiene que decir antes de guardar, no después.
+- **Métricas de duración futuras exigen migración.** Al medir con marcas de tiempo en la entidad (ADR-0023) y no sobre el registro de eventos, cualquier duración que no se esté guardando hoy no se puede reconstruir hacia atrás. El caso concreto ya identificado: el instante en que el mesero retira un plato listo no se registra en ningún lado.
+- **HTTP/2 es requisito de producción**, no una optimización: sobre HTTP/1.1 el límite de conexiones por origen puede agotarse con varias pestañas por estación (ADR-0008).
+- **Crecimiento sin política de archivado.** El registro de eventos (ADR-0009) y el libro de movimientos (ADR-0005) crecen sin límite. El libro además va a requerir un saldo materializado por insumo cuando sumar movimientos deje de ser viable.
+- **Corrección de datos históricos.** El PRD listó como caso borde corregir una compra ya consumida por ventas cerradas. Con snapshots inmutables el ajuste no se propaga y hace falta un mecanismo explícito que todavía no existe.
+- **Despliegue acoplado.** Un solo artefacto de cliente significa que no se puede corregir el dashboard sin recargar el KDS y las estaciones (ADR-0001). En pleno servicio, eso es una ventana de riesgo.
+- **La emisión electrónica sigue fuera de alcance.** El comprobante está modelado pero no se emite, así que en un uso real cada venta debería transcribirse a un emisor externo. tRPC (ADR-0010) además no deja una API que un facturador de terceros pueda consumir.

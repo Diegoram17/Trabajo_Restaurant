@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestión administrativa · POS Restaurante</title>
+<style>
+/* ============================================================
+   Tokens — DESIGN.md
+   Superficie: /admin · desktop ~60cm · densidad alta · modo claro
+   ============================================================ */
+:root{
+  --ink:#151515; --muted:#555; --faint:#777; --bg:#faf9f5; --card:#fff;
+  --line:#e6e6e6; --line-strong:#151515; --shade:#f8f8f8;
+  --primary:#e31c23; --gold:#c9a227;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --mono:ui-monospace,"JetBrains Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font:400 15px/1.5 var(--sans);
+  display:flex; overflow:hidden;
+}
+/* números siempre tabulares: es una superficie de dinero */
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+
+/* ============================ SIDEBAR ============================ */
+aside{
+  width:256px; flex:0 0 auto; background:var(--shade);
+  border-right:1px solid var(--line);
+  display:flex; flex-direction:column; padding:24px 0;
+}
+.brand{padding:0 24px 24px; font:800 22px var(--sans)}
+.navgroup{padding:16px 24px 6px; font:700 11px var(--sans);
+  text-transform:uppercase; letter-spacing:.09em; color:var(--faint)}
+.navitem{
+  padding:11px 24px; font:600 15px var(--sans); color:var(--muted);
+  border-left:3px solid transparent; cursor:pointer; user-select:none;
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.navitem:hover{background:#f0efeb; color:var(--ink)}
+.navitem.on{background:var(--card); color:var(--ink); border-left-color:var(--primary)}
+.navitem .pill{
+  font:700 11px var(--mono); min-width:20px; height:20px; padding:0 6px;
+  border-radius:999px; background:var(--critical); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+}
+.who{
+  margin-top:auto; padding:16px 24px 0; border-top:1px solid var(--line);
+  display:flex; align-items:center; gap:10px;
+}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--ink);color:#fff;
+  display:flex;align-items:center;justify-content:center;font:700 15px var(--sans)}
+
+/* ============================ LAYOUT ============================ */
+main{flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden}
+.topbar{
+  padding:24px 32px; border-bottom:1px solid var(--line); background:var(--card);
+  display:flex; align-items:flex-start; gap:24px;
+}
+.topbar h1{font:800 26px var(--sans); letter-spacing:-.01em}
+.topbar p{color:var(--muted); font-size:14px; margin-top:6px; max-width:70ch}
+.topbar .spacer{flex:1}
+.scroll{flex:1; overflow-y:auto; padding:24px 32px 64px}
+
+/* ============================ COMPONENTES ============================ */
+.card{background:var(--card); border:1px solid var(--line); border-radius:12px}
+.card + .card{margin-top:24px}
+.card > h2{
+  font:700 13px var(--sans); text-transform:uppercase; letter-spacing:.08em;
+  color:var(--faint); padding:18px 20px 0;
+}
+.card > .body{padding:20px}
+
+button{font:600 15px var(--sans); cursor:pointer; border-radius:10px;
+  border:1px solid transparent; padding:0 18px; height:44px; background:none; color:inherit}
+button:focus-visible{outline:3px solid var(--primary); outline-offset:2px}
+.btn-primary{background:var(--primary); color:#fff}
+.btn-primary:hover{background:#c8171d}
+.btn-ghost{border-color:#444; color:var(--ink)}
+.btn-ghost:hover{background:var(--shade)}
+.btn-danger{border-color:var(--critical); color:var(--critical)}
+.btn-danger:hover{background:#fdf2f2}
+.btn-sm{height:34px; padding:0 12px; font-size:14px; border-radius:8px}
+button:disabled{opacity:.45; cursor:not-allowed}
+
+table{width:100%; border-collapse:collapse; font-size:14px}
+th{
+  text-align:left; font:700 11px var(--sans); text-transform:uppercase;
+  letter-spacing:.07em; color:var(--faint); padding:0 12px 10px;
+  border-bottom:1px solid var(--line); white-space:nowrap;
+}
+th.r,td.r{text-align:right}
+td{padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--shade)}
+td.name{font-weight:600}
+.sub{display:block; font-size:12px; color:var(--faint); font-weight:400; margin-top:2px}
+.actions{display:flex; gap:6px; justify-content:flex-end}
+.tablewrap{overflow-x:auto}
+
+/* estado: nunca solo color — icono + texto (DESIGN.md) */
+.badge{
+  display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+  font:700 11px var(--sans); text-transform:uppercase; letter-spacing:.05em;
+  padding:4px 9px; border-radius:999px; border:1px solid currentColor;
+}
+.b-good{color:#0a7d0a} .b-warning{color:#8a6100} .b-serious{color:#a84a22}
+.b-critical{color:var(--critical)} .b-neutral{color:var(--faint)}
+
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px}
+.kpi{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px}
+.kpi .lab{font:600 12px var(--sans); color:var(--faint); text-transform:uppercase; letter-spacing:.06em}
+.kpi .val{font:800 26px var(--mono); font-variant-numeric:tabular-nums; margin-top:8px}
+.kpi .foot{font-size:12px; color:var(--faint); margin-top:4px}
+
+label.f{display:block; margin-bottom:16px}
+label.f > span{display:block; font:600 13px var(--sans); color:var(--muted); margin-bottom:6px}
+input,select,textarea{
+  width:100%; font:400 15px var(--sans); color:var(--ink); background:var(--card);
+  border:1px solid var(--line); border-radius:10px; padding:11px 13px; height:46px;
+}
+textarea{height:auto; min-height:74px; padding:10px 13px; resize:vertical}
+input.num,td input{font-family:var(--mono); font-variant-numeric:tabular-nums}
+input:focus,select:focus,textarea:focus{outline:none; border-color:var(--ink); box-shadow:0 0 0 3px rgba(21,21,21,.08)}
+input[aria-invalid="true"]{border-color:var(--critical); box-shadow:0 0 0 3px rgba(208,59,59,.1)}
+.err{display:flex; gap:6px; align-items:flex-start; color:var(--critical);
+  font:600 13px var(--sans); margin-top:6px}
+.hint{font-size:13px; color:var(--faint); margin-top:6px}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:0 20px}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:0 20px}
+
+/* switch de crédito fiscal */
+.switch{display:flex; align-items:center; gap:12px; padding:14px 16px;
+  border:1px solid var(--line); border-radius:10px; cursor:pointer; user-select:none}
+.switch.on{border-color:var(--ink); background:var(--shade)}
+.track{width:46px;height:26px;border-radius:999px;background:#ccc;position:relative;flex:0 0 auto;transition:background .15s}
+.switch.on .track{background:var(--good)}
+.knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
+.switch.on .knob{left:23px}
+.switch b{font:600 15px var(--sans)} .switch em{display:block;font:400 13px var(--sans);color:var(--faint);font-style:normal}
+
+/* bloque de consecuencia — el patrón central de esta superficie */
+.effect{
+  border:2px solid var(--line-strong); border-radius:12px; padding:16px 18px; margin-top:4px;
+  background:var(--card);
+}
+.effect h3{font:700 11px var(--sans); text-transform:uppercase; letter-spacing:.08em;
+  color:var(--faint); margin-bottom:12px}
+.effect .row{display:flex; justify-content:space-between; align-items:baseline; gap:16px; padding:5px 0}
+.effect .row > span:first-child{font-size:14px; color:var(--muted)}
+.effect .row > span:last-child{font:600 15px var(--mono); font-variant-numeric:tabular-nums}
+.effect .row.total{border-top:2px solid var(--line-strong); margin-top:10px; padding-top:12px}
+.effect .row.total > span:first-child{font:800 16px var(--sans); color:var(--ink)}
+.effect .row.total > span:last-child{font:800 22px var(--mono)}
+.delta{font-size:13px; font-weight:700}
+.delta.up{color:#0a7d0a} .delta.down{color:var(--critical)}
+
+.note{border-left:3px solid var(--warning); background:var(--card); padding:14px 18px;
+  border-radius:0 10px 10px 0; font-size:14px; color:var(--muted); margin-bottom:20px}
+.note.stop{border-left-color:var(--critical)}
+.note.info{border-left-color:var(--faint)}
+.note b{color:var(--ink)}
+.empty{text-align:center; padding:56px 20px; color:var(--faint)}
+.empty .big{font:700 18px var(--sans); color:var(--ink); margin-bottom:8px}
+
+/* ============================ MODAL ============================ */
+.veil{position:fixed; inset:0; background:rgba(21,21,21,.44); display:flex;
+  align-items:flex-start; justify-content:center; padding:48px 24px; overflow-y:auto; z-index:100}
+.modal{background:var(--card); border-radius:14px; width:100%; max-width:640px;
+  box-shadow:0 24px 64px rgba(0,0,0,.24)}
+.modal.wide{max-width:860px}
+.modal header{padding:24px 26px 0}
+.modal header h2{font:800 22px var(--sans)}
+.modal header p{color:var(--muted); font-size:14px; margin-top:6px}
+.modal .content{padding:22px 26px}
+.modal footer{padding:18px 26px 24px; display:flex; gap:12px; justify-content:flex-end;
+  border-top:1px solid var(--line); margin-top:4px}
+.modal footer .spacer{flex:1}
+
+#toast{position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(140%);
+  background:var(--ink); color:#fff; padding:14px 22px; border-radius:12px;
+  font:600 15px var(--sans); z-index:200; transition:transform .22s ease; max-width:70ch}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast .ic{color:var(--good); margin-right:8px; font-weight:800}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">POS · Admin</div>
+  <nav id="nav"></nav>
+  <div class="who">
+    <div class="avatar">AT</div>
+    <div>
+      <div style="font:600 14px var(--sans)">Ana Torres</div>
+      <div style="font-size:12px;color:var(--faint)">Administrador</div>
+    </div>
+  </div>
+</aside>
+
+<main>
+  <div class="topbar">
+    <div>
+      <h1 id="ttl"></h1>
+      <p id="sub"></p>
+    </div>
+    <div class="spacer"></div>
+    <div id="topact" style="display:flex;gap:10px;flex:0 0 auto"></div>
+  </div>
+  <div class="scroll" id="view"></div>
+</main>
+
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ==================================================================
+   Prototipo · Gestión administrativa (/admin)
+   Reglas que este prototipo demuestra, no solo dibuja:
+   - Importes en enteros de céntimos (ADR-0011). Nada de flotantes.
+   - El costo FIFO se calcula del libro de movimientos (ADR-0005).
+   - Toda escritura que mueve el costo muestra su efecto ANTES de guardar.
+   - Las bajas se bloquean por dependencia; no hay borrado silencioso.
+   ================================================================== */
+
+const IGV_PCT = 18;
+
+/* ---------- dinero: enteros de céntimos ---------- */
+const S_ = n => 'S/ ' + (n/100).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct = n => n.toLocaleString('es-PE',{minimumFractionDigits:1,maximumFractionDigits:1}) + '%';
+const toCent = v => { const n = parseFloat(String(v).replace(',','.')); return Number.isFinite(n) ? Math.round(n*100) : NaN; };
+const neto2bruto = c => c + Math.round(c * IGV_PCT / 100);
+const bruto2neto = c => Math.round(c * 100 / (100 + IGV_PCT));
+const qty = n => Number(n).toLocaleString('es-PE',{maximumFractionDigits:2});
+
+/* ---------- estado ---------- */
+let uid = 100;
+const nid = () => ++uid;
+
+const ST = {
+  screen: 'menu',
+  insumos: [
+    {id:1, nombre:'Pescado (perico)', unidad:'g',  min:3000},
+    {id:2, nombre:'Limón',            unidad:'u',  min:60},
+    {id:3, nombre:'Cebolla roja',     unidad:'g',  min:2000},
+    {id:4, nombre:'Camote',           unidad:'g',  min:1500},
+    {id:5, nombre:'Ají amarillo',     unidad:'g',  min:500},
+    {id:6, nombre:'Lomo de res',      unidad:'g',  min:2500},
+    {id:7, nombre:'Papa amarilla',    unidad:'g',  min:4000},
+    {id:8, nombre:'Arroz',            unidad:'g',  min:5000},
+    {id:9, nombre:'Culantro',         unidad:'g',  min:200},
+    {id:10,nombre:'Ajo molido',       unidad:'g',  min:300},
+    {id:21,nombre:'Pollo (pechuga)',   unidad:'g',  min:3000},
+    {id:22,nombre:'Pan molido',        unidad:'g',  min:500},
+    {id:23,nombre:'Leche evaporada',   unidad:'ml', min:1000},
+    {id:24,nombre:'Maíz morado',       unidad:'g',  min:1000},
+    {id:25,nombre:'Azúcar',            unidad:'g',  min:2000},
+  ],
+  // lotes de compra. pagado = lo que salió del bolsillo (bruto si hay factura)
+  compras: [
+    {id:11, insumoId:1, cantidad:8000,  pagado:33040, fiscal:true,  fecha:'2026-08-12'},
+    {id:12, insumoId:1, cantidad:6000,  pagado:27000, fiscal:false, fecha:'2026-08-16'},
+    {id:13, insumoId:2, cantidad:200,   pagado:11800, fiscal:true,  fecha:'2026-08-13'},
+    {id:14, insumoId:3, cantidad:9000,  pagado:5310,  fiscal:true,  fecha:'2026-08-13'},
+    {id:15, insumoId:4, cantidad:7000,  pagado:2800,  fiscal:false, fecha:'2026-08-14'},
+    {id:16, insumoId:5, cantidad:2000,  pagado:2360,  fiscal:true,  fecha:'2026-08-14'},
+    {id:17, insumoId:6, cantidad:10000, pagado:66080, fiscal:true,  fecha:'2026-08-15'},
+    {id:18, insumoId:7, cantidad:20000, pagado:6000,  fiscal:false, fecha:'2026-08-15'},
+    {id:19, insumoId:8, cantidad:25000, pagado:11800, fiscal:true,  fecha:'2026-08-11'},
+    {id:20, insumoId:9, cantidad:500,   pagado:1500,  fiscal:false, fecha:'2026-08-16'},
+    {id:26, insumoId:21,cantidad:12000, pagado:19824, fiscal:true,  fecha:'2026-08-15'},
+    {id:27, insumoId:22,cantidad:3000,  pagado:2400,  fiscal:false, fecha:'2026-08-12'},
+    {id:28, insumoId:23,cantidad:6000,  pagado:4248,  fiscal:true,  fecha:'2026-08-13'},
+    {id:29, insumoId:24,cantidad:5000,  pagado:4130,  fiscal:true,  fecha:'2026-08-14'},
+    {id:30, insumoId:25,cantidad:10000, pagado:4000,  fiscal:false, fecha:'2026-08-11'},
+  ],
+  // libro de movimientos. El stock es la SUMA de esto (ADR-0005)
+  movs: [],
+  platos: [
+    {id:31, nombre:'Ceviche clásico',    cat:'Entradas', neto:3200, dispo:true,  motivo:null},
+    {id:32, nombre:'Causa limeña',       cat:'Entradas', neto:2400, dispo:true,  motivo:null},
+    {id:33, nombre:'Lomo saltado',       cat:'Fondos',   neto:3800, dispo:true,  motivo:null},
+    {id:34, nombre:'Arroz con mariscos', cat:'Fondos',   neto:4200, dispo:false, motivo:'manual'},
+    {id:35, nombre:'Ají de gallina',     cat:'Fondos',   neto:2900, dispo:true,  motivo:null},
+    {id:36, nombre:'Chicha morada',      cat:'Bebidas',  neto:800,  dispo:true,  motivo:null},
+  ],
+  recetas: {
+    31:[{insumoId:1,cant:180},{insumoId:2,cant:3},{insumoId:3,cant:40},{insumoId:4,cant:80},{insumoId:9,cant:5}],
+    32:[{insumoId:7,cant:220},{insumoId:5,cant:25},{insumoId:2,cant:1},{insumoId:21,cant:90}],
+    33:[{insumoId:6,cant:200},{insumoId:3,cant:50},{insumoId:7,cant:150},{insumoId:8,cant:120}],
+    34:[],
+    35:[{insumoId:21,cant:140},{insumoId:22,cant:60},{insumoId:23,cant:80},{insumoId:5,cant:45},{insumoId:8,cant:150}],
+    36:[{insumoId:24,cant:80},{insumoId:25,cant:40},{insumoId:2,cant:0.5}],
+  },
+  combos:[
+    {id:41, nombre:'Menú criollo', neto:5400, items:[{platoId:31,cant:1},{platoId:33,cant:1}]},
+  ],
+  costos:{
+    vigenteDesde:'2026-08-01',
+    cocina:280000, admin:190000, indirectos:420000,
+    comision:5, merma:3, igv:IGV_PCT,
+  },
+  personas:[
+    {id:51, nombre:'Carla Ramírez', rol:'mesero',        sueldo:120000, pin:'2417', activo:true},
+    {id:52, nombre:'Luis Paredes',  rol:'mesero',        sueldo:120000, pin:'8830', activo:true},
+    {id:53, nombre:'Rosa Quispe',   rol:'cocina',        sueldo:150000, pin:'',     activo:true},
+    {id:54, nombre:'Ana Torres',    rol:'administrador', sueldo:220000, pin:'1002', activo:true},
+    {id:55, nombre:'Jorge Núñez',   rol:'mesero',        sueldo:120000, pin:'4419', activo:false},
+  ],
+  propinas:[
+    {id:61, meseroId:51, monto:4200, origen:'efectivo', estado:'pendiente'},
+    {id:62, meseroId:51, monto:3500, origen:'pos',      estado:'pendiente'},
+    {id:63, meseroId:52, monto:1800, origen:'efectivo', estado:'pendiente'},
+    {id:64, meseroId:52, monto:6100, origen:'pos',      estado:'pendiente'},
+    {id:65, meseroId:51, monto:2000, origen:'pos',      estado:'liquidada'},
+  ],
+  liquidaciones:[
+    {id:71, meseroId:51, monto:2000, fecha:'2026-08-10'},
+  ],
+  incidencias:[
+    {id:81, insumoId:5, faltante:120, ref:'Comanda #1042 · Ají de gallina', fecha:'2026-08-17', resuelta:false},
+  ],
+  mermas:[],
+  // el salón está operando: hay cuentas abiertas. Cambiar precios ahora tiene consecuencia.
+  cuentasAbiertas:[{mesa:4, platoIds:[31,33]},{mesa:9, platoIds:[35]}],
+};
+
+/* seed del libro: una entrada por lote, más algunas salidas por consumo */
+ST.compras.forEach(c => ST.movs.push({
+  id:nid(), insumoId:c.insumoId, loteId:c.id, tipo:'entrada', cant:c.cantidad,
+  costoUnit:loteCostoUnit(c), origen:'compra', ref:'Compra #'+c.id, fecha:c.fecha
+}));
+[[1,2400],[2,42],[3,1300],[4,900],[6,3200],[7,5600],[8,3600],[9,60],[21,3400],[22,900],[23,1400],[24,600],[25,800],[5,2120]].forEach(([iid,q])=>{
+  consumirFifo(iid, q, 'comanda_preparada', 'Consumo del servicio', '2026-08-17', true);
+});
+
+/* ---------- reglas de dominio ---------- */
+// Con crédito fiscal el lote se costea NETO: el IGV se recupera, no es costo (PRD).
+function loteCosteado(c){ return c.fiscal ? bruto2neto(c.pagado) : c.pagado; }
+function loteCostoUnit(c){ return c.cantidad > 0 ? Math.round(loteCosteado(c)/c.cantidad*100)/100 : 0; }
+
+function stock(insumoId){
+  return ST.movs.filter(m=>m.insumoId===insumoId)
+    .reduce((s,m)=> s + (m.tipo==='entrada' ? m.cant : -m.cant), 0);
+}
+function loteRestante(loteId){
+  const c = ST.compras.find(x=>x.id===loteId); if(!c) return 0;
+  const out = ST.movs.filter(m=>m.loteId===loteId && m.tipo!=='entrada')
+    .reduce((s,m)=>s+m.cant,0);
+  return c.cantidad - out;
+}
+// lotes ordenados por fecha y luego por id: la clave de orden FIFO es explícita
+function lotesFifo(insumoId){
+  return ST.compras.filter(c=>c.insumoId===insumoId)
+    .sort((a,b)=> a.fecha===b.fecha ? a.id-b.id : (a.fecha<b.fecha?-1:1));
+}
+// costo del lote más antiguo con saldo; si no hay, el último lote conocido (PRD, caso borde)
+function costoFifoUnit(insumoId){
+  const ls = lotesFifo(insumoId);
+  const vivo = ls.find(c=>loteRestante(c.id)>0);
+  if(vivo) return loteCostoUnit(vivo);
+  if(ls.length) return loteCostoUnit(ls[ls.length-1]);
+  return null; // nunca comprado -> no costeable
+}
+function consumirFifo(insumoId, cantidad, origen, ref, fecha, silencioso){
+  let resta = cantidad;
+  for(const c of lotesFifo(insumoId)){
+    if(resta<=0) break;
+    const disp = loteRestante(c.id);
+    if(disp<=0) continue;
+    const usa = Math.min(disp, resta);
+    ST.movs.push({id:nid(), insumoId, loteId:c.id, tipo:'salida', cant:usa,
+      costoUnit:loteCostoUnit(c), origen, ref, fecha});
+    resta -= usa;
+  }
+  if(resta>0){ // sin lote: se permite igual y se marca incidencia (PRD)
+    const cu = costoFifoUnit(insumoId) ?? 0;
+    ST.movs.push({id:nid(), insumoId, loteId:null, tipo:'salida', cant:resta,
+      costoUnit:cu, origen, ref, fecha});
+    if(!silencioso) ST.incidencias.push({id:nid(), insumoId, faltante:resta, ref, fecha, resuelta:false});
+  }
+  return resta; // faltante
+}
+function costoReceta(platoId){
+  const r = ST.recetas[platoId] || [];
+  if(!r.length) return null;               // sin receta -> no costeable
+  let t = 0;
+  for(const l of r){
+    const cu = costoFifoUnit(l.insumoId);
+    if(cu === null) return null;           // un insumo sin compras contamina todo el plato
+    t += cu * l.cant;
+  }
+  return Math.round(t);
+}
+// margen = neto − costo FIFO − merma estimada (PRD)
+function margenPlato(p){
+  const c = costoReceta(p.id);
+  if(c === null) return null;
+  const merma = Math.round(c * ST.costos.merma / 100);
+  const m = p.neto - c - merma;
+  return {costo:c, merma, margen:m, pctm: p.neto ? m/p.neto*100 : 0};
+}
+function valorInventario(){
+  return ST.insumos.reduce((s,i)=>{
+    const cu = costoFifoUnit(i.id); const q = stock(i.id);
+    return s + (cu===null||q<=0 ? 0 : Math.round(cu*q));
+  },0);
+}
+function estadoInsumo(i){
+  const q = stock(i.id);
+  if(costoFifoUnit(i.id)===null) return {k:'critical', t:'No costeable'};
+  if(q < 0)      return {k:'serious',  t:'Stock negativo'};
+  if(q === 0)    return {k:'critical', t:'Agotado'};
+  if(q <= i.min) return {k:'warning',  t:'Por agotarse'};
+  return {k:'good', t:'Sano'};
+}
+// un plato queda no disponible si algún insumo de su receta está en cero
+function agotadoAuto(p){
+  const r = ST.recetas[p.id] || [];
+  return r.some(l => stock(l.insumoId) <= 0);
+}
+function combosCon(platoId){ return ST.combos.filter(c=>c.items.some(i=>i.platoId===platoId)); }
+function cuentasCon(platoId){ return ST.cuentasAbiertas.filter(c=>c.platoIds.includes(platoId)); }
+function insumo(id){ return ST.insumos.find(i=>i.id===id); }
+function plato(id){ return ST.platos.find(p=>p.id===id); }
+function persona(id){ return ST.personas.find(p=>p.id===id); }
+
+/* ---------- helpers de vista ---------- */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const badge = (k,t) => `<span class="badge b-${k}">${ICON[k]||''} ${esc(t)}</span>`;
+const ICON = {good:'●', warning:'▲', serious:'▲', critical:'✕', neutral:'○'};
+const $ = s => document.querySelector(s);
+
+function toast(msg){
+  const t = $('#toast');
+  t.innerHTML = '<span class="ic">✓</span>' + esc(msg);
+  t.classList.add('show');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(()=>t.classList.remove('show'), 3400);
+}
+
+/* ---------- navegación ---------- */
+const NAV = [
+  {g:'Catálogo'},
+  {k:'menu',        t:'Menú y combos',        h:'Precio, disponibilidad y margen por plato. La baja se bloquea si el plato sostiene un combo.'},
+  {k:'recetas',     t:'Recetas',              h:'El puente entre la venta y el inventario. Cambiar una receta mueve el margen de todas las ventas futuras.'},
+  {g:'Inventario'},
+  {k:'insumos',     t:'Insumos y stock',      h:'Stock derivado del libro de movimientos, valorizado al costo FIFO vigente.'},
+  {k:'compras',     t:'Compras (lotes)',      h:'Cada compra es un lote FIFO. El crédito fiscal decide si el lote se costea neto o bruto.'},
+  {k:'mermas',      t:'Mermas',               h:'Baja de stock por pérdida real. Consume lotes FIFO y su costo sale del margen.'},
+  {k:'incidencias', t:'Incidencias de stock', h:'Ventas que dejaron stock negativo. Es una bandeja de trabajo, no un reporte.'},
+  {g:'Negocio'},
+  {k:'costos',      t:'Estructura de costos', h:'Versionada por vigencia: cambiar un porcentaje no puede alterar un periodo ya reportado.'},
+  {k:'personal',    t:'Personal y roles',     h:'Tres roles: mesero, cocina y administrador. El rol de cajero no existe desde la v1.2.'},
+  {k:'propinas',    t:'Propinas por liquidar',h:'Dinero que el negocio le debe al mesero. No atraviesa el estado de resultados.'},
+];
+
+function renderNav(){
+  $('#nav').innerHTML = NAV.map(n=>{
+    if(n.g) return `<div class="navgroup">${esc(n.g)}</div>`;
+    let pill = '';
+    if(n.k==='incidencias'){
+      const c = ST.incidencias.filter(i=>!i.resuelta).length;
+      if(c) pill = `<span class="pill">${c}</span>`;
+    }
+    return `<div class="navitem ${ST.screen===n.k?'on':''}" data-k="${n.k}">
+      <span>${esc(n.t)}</span>${pill}</div>`;
+  }).join('');
+  $('#nav').querySelectorAll('.navitem').forEach(el=>{
+    el.onclick = ()=>{ ST.screen = el.dataset.k; render(); };
+  });
+}
+
+const SCREENS = {};
+
+function render(){
+  renderNav();
+  const meta = NAV.find(n=>n.k===ST.screen);
+  $('#ttl').textContent = meta.t;
+  $('#sub').textContent = meta.h;
+  $('#topact').innerHTML = '';
+  $('#view').innerHTML = '';
+  SCREENS[ST.screen]();
+  $('#view').scrollTop = 0;
+}
+function topAction(label, fn, cls='btn-primary'){
+  const b = document.createElement('button');
+  b.className = cls; b.textContent = label; b.onclick = fn;
+  $('#topact').appendChild(b);
+}
+
+/* ---------- modal ---------- */
+function modal({title, sub, body, wide, footer}){
+  const root = $('#modal');
+  root.innerHTML = `<div class="veil"><div class="modal ${wide?'wide':''}" role="dialog" aria-modal="true">
+    <header><h2>${esc(title)}</h2>${sub?`<p>${sub}</p>`:''}</header>
+    <div class="content">${body}</div>
+    <footer>${footer}</footer></div></div>`;
+  root.querySelector('.veil').onclick = e => { if(e.target.classList.contains('veil')) closeModal(); };
+  document.onkeydown = e => { if(e.key==='Escape') closeModal(); };
+  const first = root.querySelector('input,select,textarea');
+  if(first) first.focus();
+  return root;
+}
+function closeModal(){ $('#modal').innerHTML=''; document.onkeydown=null; }
+function fieldErr(el, msg){
+  el.setAttribute('aria-invalid','true');
+  const old = el.parentNode.querySelector('.err'); if(old) old.remove();
+  const d = document.createElement('div'); d.className='err'; d.innerHTML='<span>✕</span><span>'+esc(msg)+'</span>';
+  el.parentNode.appendChild(d);
+}
+function clearErr(scope){
+  scope.querySelectorAll('.err').forEach(e=>e.remove());
+  scope.querySelectorAll('[aria-invalid]').forEach(e=>e.removeAttribute('aria-invalid'));
+}
+
+/* ==================================================================
+   1 · MENÚ Y COMBOS
+   ================================================================== */
+SCREENS.menu = () => {
+  topAction('Nuevo plato', ()=>editPlato(null));
+  const noCost = ST.platos.filter(p=>margenPlato(p)===null).length;
+
+  const rows = ST.platos.map(p=>{
+    const m = margenPlato(p);
+    const auto = agotadoAuto(p);
+    const st = !p.dispo ? badge('neutral','No disponible · manual')
+             : auto     ? badge('critical','Agotado · automático')
+                        : badge('good','Disponible');
+    const nCombos = combosCon(p.id).length;
+    return `<tr>
+      <td class="name">${esc(p.nombre)}
+        ${nCombos?`<span class="sub">En ${nCombos} combo${nCombos>1?'s':''}</span>`:''}</td>
+      <td>${esc(p.cat)}</td>
+      <td class="r num">${S_(p.neto)}</td>
+      <td class="r num" style="color:var(--faint)">${S_(neto2bruto(p.neto))}</td>
+      <td class="r num">${m===null?'—':S_(m.costo)}</td>
+      <td class="r num">${m===null?'—':S_(m.margen)}</td>
+      <td class="r">${m===null
+        ? badge('critical','No costeable')
+        : `<span class="num" style="font-weight:700;color:${m.pctm<30?'var(--critical)':'inherit'}">${pct(m.pctm)}</span>`}</td>
+      <td>${st}</td>
+      <td class="r"><div class="actions">
+        <button class="btn-ghost btn-sm" data-ed="${p.id}">Editar</button>
+        <button class="btn-ghost btn-sm" data-dispo="${p.id}">${p.dispo?'Marcar agotado':'Reactivar'}</button>
+        <button class="btn-danger btn-sm" data-baja="${p.id}">Dar de baja</button>
+      </div></td></tr>`;
+  }).join('');
+
+  const comboRows = ST.combos.map(c=>{
+    const comps = c.items.map(i=>plato(i.platoId)).filter(Boolean);
+    const sumaLista = c.items.reduce((s,i)=>s + (plato(i.platoId)?.neto||0)*i.cant, 0);
+    const dcto = sumaLista - c.neto;
+    const agotado = comps.some(p=>!p.dispo || agotadoAuto(p));
+    // el precio del combo se reparte proporcional al precio de lista (PRD)
+    const reparto = c.items.map(i=>{
+      const p = plato(i.platoId); if(!p) return '';
+      const share = sumaLista ? Math.round(c.neto * (p.neto*i.cant) / sumaLista) : 0;
+      return `${esc(p.nombre)} → ${S_(share)}`;
+    }).join(' · ');
+    return `<tr>
+      <td class="name">${esc(c.nombre)}<span class="sub">${esc(comps.map(p=>p.nombre).join(' + '))}</span></td>
+      <td class="r num">${S_(sumaLista)}</td>
+      <td class="r num">${S_(c.neto)}</td>
+      <td class="r num" style="color:var(--critical)">−${S_(dcto)}</td>
+      <td>${agotado?badge('critical','Agotado por componente'):badge('good','Disponible')}</td>
+      <td style="font-size:12px;color:var(--faint)">${reparto}</td></tr>`;
+  }).join('');
+
+  $('#view').innerHTML = `
+    ${noCost?`<div class="note stop"><b>${noCost} plato${noCost>1?'s':''} sin costo calculable.</b>
+      Un plato sin receta —o con un insumo que nunca se compró— no puede entrar al margen del dashboard.
+      No se asume costo cero: se marca como no costeable.</div>`:''}
+    <div class="card"><h2>Platos</h2><div class="body"><div class="tablewrap"><table>
+      <thead><tr>
+        <th>Plato</th><th>Categoría</th><th class="r">Precio neto</th><th class="r">Con IGV</th>
+        <th class="r">Costo FIFO</th><th class="r">Margen u.</th><th class="r">Margen %</th>
+        <th>Estado</th><th class="r">Acciones</th>
+      </tr></thead><tbody>${rows}</tbody></table></div></div></div>
+
+    <div class="card"><h2>Combos</h2><div class="body">
+      <div class="note info">El combo <b>no tiene receta propia</b>: al venderse descuenta la receta de cada
+        plato que lo compone. Su precio se reparte entre los componentes proporcional al precio de lista,
+        para que el descuento no favorezca a ninguno.</div>
+      <div class="tablewrap"><table>
+      <thead><tr><th>Combo</th><th class="r">Suma de lista</th><th class="r">Precio combo</th>
+        <th class="r">Descuento</th><th>Estado</th><th>Reparto para el margen</th></tr></thead>
+      <tbody>${comboRows}</tbody></table></div></div></div>`;
+
+  $('#view').querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>editPlato(+b.dataset.ed));
+  $('#view').querySelectorAll('[data-baja]').forEach(b=>b.onclick=()=>bajaPlato(+b.dataset.baja));
+  $('#view').querySelectorAll('[data-dispo]').forEach(b=>b.onclick=()=>{
+    const p = plato(+b.dataset.dispo);
+    p.dispo = !p.dispo; p.motivo = p.dispo ? null : 'manual';
+    toast(`${p.nombre}: ${p.dispo?'reactivado':'marcado como agotado a mano'}. Se refleja en las 3 estaciones.`);
+    render();
+  });
+};
+
+function editPlato(id){
+  const p = id ? plato(id) : {id:null, nombre:'', cat:'Entradas', neto:0, dispo:true};
+  const cuentas = id ? cuentasCon(id) : [];
+  const body = `
+    <label class="f"><span>Nombre del plato</span>
+      <input id="f-nom" value="${esc(p.nombre)}" placeholder="Ej. Ceviche clásico"></label>
+    <div class="grid2">
+      <label class="f"><span>Categoría</span><select id="f-cat">
+        ${['Entradas','Fondos','Postres','Bebidas'].map(c=>`<option ${c===p.cat?'selected':''}>${c}</option>`).join('')}
+      </select></label>
+      <label class="f"><span>Precio de venta neto (sin IGV)</span>
+        <input class="num" id="f-neto" value="${p.neto?(p.neto/100).toFixed(2):''}" placeholder="0.00" inputmode="decimal"></label>
+    </div>
+    <div id="f-eff"></div>
+    ${cuentas.length?`<div class="note" style="margin-top:20px"><b>Hay ${cuentas.length} cuenta${cuentas.length>1?'s':''} abierta${cuentas.length>1?'s':''}
+      con este plato</b> (mesa ${cuentas.map(c=>c.mesa).join(', mesa ')}). Las cuentas en curso conservan el
+      precio con el que se tomó cada ítem; el precio nuevo aplica solo a rondas futuras.</div>`:''}`;
+
+  const root = modal({
+    title: id?'Editar plato':'Nuevo plato',
+    sub: 'El precio se ingresa <b>neto</b>. El IGV y el margen se derivan y se muestran antes de guardar.',
+    body,
+    footer:`<button class="btn-ghost" id="f-cancel">Cancelar</button>
+            <div class="spacer"></div><button class="btn-primary" id="f-save">Guardar</button>`
+  });
+
+  const nom = root.querySelector('#f-nom'), cat = root.querySelector('#f-cat'), net = root.querySelector('#f-neto');
+  const eff = root.querySelector('#f-eff');
+
+  function paint(){
+    const c = toCent(net.value);
+    const costo = id ? costoReceta(id) : (p.id?costoReceta(p.id):null);
+    if(!Number.isFinite(c) || c<=0){
+      eff.innerHTML = `<div class="effect"><h3>Efecto</h3>
+        <div class="row"><span>Ingresá un precio neto para ver el margen</span><span>—</span></div></div>`;
+      return;
+    }
+    const merma = costo===null?0:Math.round(costo*ST.costos.merma/100);
+    const m = costo===null?null:c-costo-merma;
+    const antes = id ? margenPlato(p) : null;
+    let d = '';
+    if(antes && m!==null && antes.margen!==m){
+      const up = m>antes.margen;
+      d = `<span class="delta ${up?'up':'down'}">${up?'▲':'▼'} ${S_(Math.abs(m-antes.margen))}</span>`;
+    }
+    eff.innerHTML = `<div class="effect"><h3>Efecto de este precio</h3>
+      <div class="row"><span>Precio neto</span><span>${S_(c)}</span></div>
+      <div class="row"><span>IGV ${IGV_PCT}%</span><span>${S_(neto2bruto(c)-c)}</span></div>
+      <div class="row"><span>Precio de carta (con IGV)</span><span>${S_(neto2bruto(c))}</span></div>
+      <div class="row"><span>Costo FIFO de la receta</span><span>${costo===null?'sin receta':'− '+S_(costo)}</span></div>
+      <div class="row"><span>Merma estimada (${ST.costos.merma}%)</span><span>${costo===null?'—':'− '+S_(merma)}</span></div>
+      <div class="row total"><span>Margen por unidad</span>
+        <span>${m===null?'No costeable':S_(m)+' '+d}</span></div>
+      ${m!==null&&c?`<div class="row"><span>Margen sobre el neto</span><span>${pct(m/c*100)}</span></div>`:''}
+      ${costo===null?`<div class="hint">Sin receta cargada no hay margen. Cargala en <b>Recetas</b> para que este plato
+        entre en "platos más rentables".</div>`:''}</div>`;
+  }
+  net.oninput = paint; paint();
+
+  root.querySelector('#f-cancel').onclick = closeModal;
+  root.querySelector('#f-save').onclick = ()=>{
+    clearErr(root);
+    let bad = false;
+    const n = nom.value.trim();
+    if(n.length < 3){ fieldErr(nom,'El nombre necesita al menos 3 caracteres.'); bad=true; }
+    else if(ST.platos.some(x=>x.nombre.toLowerCase()===n.toLowerCase() && x.id!==id)){
+      fieldErr(nom,'Ya existe un plato con ese nombre.'); bad=true;
+    }
+    const c = toCent(net.value);
+    if(!Number.isFinite(c) || c<=0){ fieldErr(net,'Ingresá un precio neto mayor que cero.'); bad=true; }
+    if(bad) return;
+
+    if(id){ p.nombre=n; p.cat=cat.value; p.neto=c; toast(`"${n}" actualizado.`); }
+    else{
+      const np = {id:nid(), nombre:n, cat:cat.value, neto:c, dispo:true, motivo:null};
+      ST.platos.push(np); ST.recetas[np.id]=[];
+      toast(`"${n}" creado. Cargale la receta para que tenga costo y margen.`);
+    }
+    closeModal(); render();
+  };
+}
+
+function bajaPlato(id){
+  const p = plato(id);
+  const cs = combosCon(id);
+  const abiertas = cuentasCon(id);
+
+  if(cs.length){ // dependencia: no se borra en silencio
+    modal({
+      title:'No se puede dar de baja',
+      sub:`"${esc(p.nombre)}" sostiene ${cs.length} combo${cs.length>1?'s':''}.`,
+      body:`<div class="note stop"><b>El combo no tiene receta propia:</b> descuenta la receta de cada plato
+        que lo compone. Si este plato desaparece, ${cs.length>1?'esos combos':'ese combo'} deja de ser
+        costeable y su margen se rompe.</div>
+        <table><thead><tr><th>Combo afectado</th><th class="r">Precio</th></tr></thead><tbody>
+        ${cs.map(c=>`<tr><td class="name">${esc(c.nombre)}</td><td class="r num">${S_(c.neto)}</td></tr>`).join('')}
+        </tbody></table>
+        <div class="hint" style="margin-top:16px">Salida: quitá el plato ${cs.length>1?'de esos combos':'de ese combo'}
+        primero, o marcalo como no disponible en lugar de darlo de baja.</div>`,
+      footer:`<button class="btn-ghost" id="x">Entendido</button>`
+    }).querySelector('#x').onclick = closeModal;
+    return;
+  }
+
+  modal({
+    title:`¿Dar de baja "${esc(p.nombre)}"?`,
+    sub:'La baja lo retira de la carta. No borra su historia.',
+    body:`<div class="note info">Las ventas ya cerradas <b>conservan su snapshot</b>: descripción, precio y costo
+      FIFO del momento (ADR-0004). Los reportes de periodos cerrados no cambian.</div>
+      ${abiertas.length?`<div class="note stop"><b>Hay ${abiertas.length} cuenta${abiertas.length>1?'s':''} abierta${abiertas.length>1?'s':''}</b>
+        con este plato (mesa ${abiertas.map(c=>c.mesa).join(', mesa ')}). Se pueden cobrar, pero no se le
+        podrán agregar más unidades.</div>`:''}`,
+    footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+            <button class="btn-danger" id="ok">Dar de baja</button>`
+  });
+  $('#modal #c').onclick = closeModal;
+  $('#modal #ok').onclick = ()=>{
+    ST.platos = ST.platos.filter(x=>x.id!==id);
+    toast(`"${p.nombre}" fuera de la carta. Sus ventas históricas quedan intactas.`);
+    closeModal(); render();
+  };
+}
+
+/* ==================================================================
+   2 · RECETAS
+   ================================================================== */
+SCREENS.recetas = () => {
+  let sel = SCREENS.recetas._sel || ST.platos[0]?.id;
+  if(!plato(sel)) sel = ST.platos[0]?.id;
+  SCREENS.recetas._sel = sel;
+  if(!sel){ $('#view').innerHTML = `<div class="empty"><div class="big">No hay platos</div>
+    Creá un plato en <b>Menú y combos</b> antes de cargar recetas.</div>`; return; }
+
+  // copia de trabajo: la receta guardada no se toca hasta confirmar
+  let draft = (ST.recetas[sel]||[]).map(l=>({...l}));
+
+  const wrap = document.createElement('div');
+  $('#view').appendChild(wrap);
+
+  function calcDraft(){
+    if(!draft.length) return null;
+    let t = 0;
+    for(const l of draft){
+      const cu = costoFifoUnit(l.insumoId);
+      if(cu===null || !(l.cant>0)) return null;
+      t += cu*l.cant;
+    }
+    return Math.round(t);
+  }
+
+  function paint(){
+    const p = plato(sel);
+    const guardado = margenPlato(p);
+    const cd = calcDraft();
+    const mermaD = cd===null?0:Math.round(cd*ST.costos.merma/100);
+    const margenD = cd===null?null:p.neto-cd-mermaD;
+    const dirty = JSON.stringify(draft)!==JSON.stringify(ST.recetas[sel]||[]);
+
+    wrap.innerHTML = `
+      <div class="card"><div class="body">
+        <label class="f" style="max-width:420px;margin-bottom:0"><span>Receta de</span>
+          <select id="r-sel">${ST.platos.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${esc(x.nombre)} · ${esc(x.cat)}</option>`).join('')}</select>
+        </label>
+      </div></div>
+
+      <div class="card"><h2>Insumos y cantidades exactas</h2><div class="body">
+        ${draft.length?`<div class="tablewrap"><table>
+          <thead><tr><th>Insumo</th><th class="r">Cantidad</th><th>Unidad</th>
+            <th class="r">Costo FIFO unit.</th><th class="r">Costo en el plato</th><th class="r"></th></tr></thead>
+          <tbody>${draft.map((l,ix)=>{
+            const i = insumo(l.insumoId); const cu = costoFifoUnit(l.insumoId);
+            return `<tr>
+              <td class="name">${esc(i?.nombre||'?')}
+                ${cu===null?'<span class="sub" style="color:var(--critical)">Sin compras registradas</span>':''}</td>
+              <td class="r" style="width:130px"><input class="num" data-q="${ix}" value="${l.cant}" inputmode="decimal" style="height:38px;text-align:right"></td>
+              <td>${esc(i?.unidad||'')}</td>
+              <td class="r num" style="color:var(--faint)">${cu===null?'—':S_(Math.round(cu*100)/100)}</td>
+              <td class="r num">${cu===null?'—':S_(Math.round(cu*l.cant))}</td>
+              <td class="r"><button class="btn-ghost btn-sm" data-del="${ix}">Quitar</button></td>
+            </tr>`;}).join('')}</tbody></table></div>`
+          :`<div class="empty"><div class="big">Receta vacía</div>
+            Sin insumos, este plato es <b>no costeable</b> y no aparece en el margen del dashboard.</div>`}
+        <div style="margin-top:18px;display:flex;gap:10px;align-items:flex-end">
+          <label class="f" style="margin:0;flex:1;max-width:340px"><span>Agregar insumo</span>
+            <select id="r-add">${ST.insumos.filter(i=>!draft.some(l=>l.insumoId===i.id))
+              .map(i=>`<option value="${i.id}">${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('')}</select></label>
+          <button class="btn-ghost" id="r-addbtn" ${ST.insumos.every(i=>draft.some(l=>l.insumoId===i.id))?'disabled':''}>Agregar</button>
+        </div>
+      </div></div>
+
+      <div class="card"><h2>Efecto de guardar</h2><div class="body">
+        <div class="effect">
+          <div class="row"><span>Precio de venta neto</span><span>${S_(p.neto)}</span></div>
+          <div class="row"><span>Costo FIFO de la receta</span>
+            <span>${cd===null?'no costeable':'− '+S_(cd)}</span></div>
+          <div class="row"><span>Merma estimada (${ST.costos.merma}%)</span>
+            <span>${cd===null?'—':'− '+S_(mermaD)}</span></div>
+          <div class="row total"><span>Margen por unidad</span><span>${margenD===null?'No costeable':S_(margenD)}</span></div>
+          ${margenD!==null&&p.neto?`<div class="row"><span>Margen sobre el neto</span><span>${pct(margenD/p.neto*100)}</span></div>`:''}
+          ${guardado && margenD!==null && guardado.margen!==margenD
+            ? `<div class="row"><span>Contra la receta guardada</span>
+                <span class="delta ${margenD>guardado.margen?'up':'down'}">
+                ${margenD>guardado.margen?'▲':'▼'} ${S_(Math.abs(margenD-guardado.margen))} por unidad</span></div>`
+            : ''}
+        </div>
+        <div class="note info" style="margin:20px 0 0">Guardar <b>no altera ninguna venta ya cerrada</b>: cada
+          venta congeló su costo FIFO al cerrarse (ADR-0004). El margen nuevo aplica desde la próxima venta.</div>
+        <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end">
+          <button class="btn-ghost" id="r-reset" ${dirty?'':'disabled'}>Descartar cambios</button>
+          <button class="btn-primary" id="r-save" ${dirty?'':'disabled'}>Guardar receta</button>
+        </div>
+      </div></div>`;
+
+    wrap.querySelector('#r-sel').onchange = e => {
+      SCREENS.recetas._sel = +e.target.value; render();
+    };
+    wrap.querySelectorAll('[data-q]').forEach(inp=>{
+      inp.onchange = ()=>{
+        const v = parseFloat(String(inp.value).replace(',','.'));
+        draft[+inp.dataset.q].cant = Number.isFinite(v) && v>0 ? v : 0;
+        paint();
+      };
+    });
+    wrap.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ draft.splice(+b.dataset.del,1); paint(); });
+    wrap.querySelector('#r-addbtn').onclick = ()=>{
+      const v = +wrap.querySelector('#r-add').value;
+      if(v) { draft.push({insumoId:v, cant:0}); paint(); }
+    };
+    wrap.querySelector('#r-reset').onclick = ()=>{ draft = (ST.recetas[sel]||[]).map(l=>({...l})); paint(); };
+    wrap.querySelector('#r-save').onclick = ()=>{
+      const cero = draft.filter(l=>!(l.cant>0));
+      if(cero.length){
+        toast(`${cero.length} línea${cero.length>1?'s':''} con cantidad en cero. La receta necesita cantidades exactas.`);
+        return;
+      }
+      ST.recetas[sel] = draft.map(l=>({...l}));
+      toast(`Receta de "${plato(sel).nombre}" guardada. Las ventas cerradas no cambian.`);
+      render();
+    };
+  }
+  paint();
+};
+
+/* ==================================================================
+   3 · INSUMOS Y STOCK
+   ================================================================== */
+SCREENS.insumos = () => {
+  topAction('Nuevo insumo', nuevoInsumo);
+  const alertas = ST.insumos.filter(i=>['warning','critical','serious'].includes(estadoInsumo(i).k));
+
+  const rows = ST.insumos.map(i=>{
+    const q = stock(i.id), cu = costoFifoUnit(i.id), e = estadoInsumo(i);
+    const val = cu===null||q<=0 ? null : Math.round(cu*q);
+    const lote = lotesFifo(i.id).find(c=>loteRestante(c.id)>0);
+    return `<tr>
+      <td class="name">${esc(i.nombre)}</td>
+      <td>${esc(i.unidad)}</td>
+      <td class="r num" style="font-weight:700;${q<0?'color:var(--serious)':''}">${qty(q)}</td>
+      <td class="r num" style="color:var(--faint)">${qty(i.min)}</td>
+      <td class="r num">${cu===null?'—':S_(Math.round(cu*100)/100)}</td>
+      <td style="font-size:12px;color:var(--faint)">${lote?`#${lote.id} · ${lote.fecha} · ${lote.fiscal?'con factura':'sin comprobante'}`:'sin lote con saldo'}</td>
+      <td class="r num">${val===null?'—':S_(val)}</td>
+      <td>${badge(e.k,e.t)}</td></tr>`;
+  }).join('');
+
+  $('#view').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Valor del inventario</div>
+        <div class="val">${S_(valorInventario())}</div>
+        <div class="foot">Al costo FIFO del lote vigente</div></div>
+      <div class="kpi"><div class="lab">Insumos registrados</div>
+        <div class="val">${ST.insumos.length}</div>
+        <div class="foot">${ST.compras.length} lotes de compra</div></div>
+      <div class="kpi"><div class="lab">Requieren atención</div>
+        <div class="val" style="color:${alertas.length?'var(--critical)':'var(--good)'}">${alertas.length}</div>
+        <div class="foot">Agotado, por agotarse o no costeable</div></div>
+      <div class="kpi"><div class="lab">Movimientos en el libro</div>
+        <div class="val">${ST.movs.length}</div>
+        <div class="foot">El stock es su suma (ADR-0005)</div></div>
+    </div>
+    <div class="card"><h2>Insumos</h2><div class="body">
+      <div class="note info">El stock no es un campo: es la <b>suma del libro de movimientos</b>. Por eso una
+        venta con stock insuficiente puede dejarlo negativo en lugar de trabarse.</div>
+      <div class="tablewrap"><table><thead><tr>
+        <th>Insumo</th><th>Unidad</th><th class="r">Stock</th><th class="r">Mínimo</th>
+        <th class="r">Costo FIFO</th><th>Lote vigente</th><th class="r">Valorizado</th><th>Estado</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+    </div></div>`;
+};
+
+function nuevoInsumo(){
+  const root = modal({
+    title:'Nuevo insumo',
+    sub:'La unidad base no se puede cambiar después: las recetas y los movimientos quedan expresados en ella.',
+    body:`<label class="f"><span>Nombre</span><input id="i-nom" placeholder="Ej. Pescado (perico)"></label>
+      <div class="grid2">
+        <label class="f"><span>Unidad base</span><select id="i-uni">
+          <option value="g">g — gramos</option><option value="ml">ml — mililitros</option><option value="u">u — unidades</option>
+        </select></label>
+        <label class="f"><span>Alerta de stock mínimo</span>
+          <input class="num" id="i-min" placeholder="0" inputmode="decimal"></label>
+      </div>
+      <div class="note info" style="margin:0">Un insumo nuevo arranca <b>sin compras</b>, así que todo plato que lo
+        use queda <b>no costeable</b> hasta registrar su primer lote. No se asume costo cero.</div>`,
+    footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+            <button class="btn-primary" id="ok">Crear insumo</button>`
+  });
+  root.querySelector('#c').onclick = closeModal;
+  root.querySelector('#ok').onclick = ()=>{
+    clearErr(root);
+    const nom = root.querySelector('#i-nom'), min = root.querySelector('#i-min');
+    const n = nom.value.trim(); let bad=false;
+    if(n.length<3){ fieldErr(nom,'El nombre necesita al menos 3 caracteres.'); bad=true; }
+    else if(ST.insumos.some(i=>i.nombre.toLowerCase()===n.toLowerCase())){ fieldErr(nom,'Ese insumo ya existe.'); bad=true; }
+    const mv = parseFloat(String(min.value).replace(',','.'));
+    if(!Number.isFinite(mv) || mv<0){ fieldErr(min,'Ingresá un mínimo válido (0 o más).'); bad=true; }
+    if(bad) return;
+    ST.insumos.push({id:nid(), nombre:n, unidad:root.querySelector('#i-uni').value, min:mv});
+    toast(`Insumo "${n}" creado. Registrá su primera compra para que tenga costo.`);
+    closeModal(); render();
+  };
+}
+
+/* ==================================================================
+   4 · COMPRAS (LOTES FIFO)
+   ================================================================== */
+SCREENS.compras = () => {
+  topAction('Registrar compra', nuevaCompra);
+  const ls = [...ST.compras].sort((a,b)=> a.fecha===b.fecha ? b.id-a.id : (a.fecha>b.fecha?-1:1));
+  const rows = ls.map(c=>{
+    const i = insumo(c.insumoId), rest = loteRestante(c.id), costeado = loteCosteado(c);
+    return `<tr>
+      <td class="num">${c.fecha}</td>
+      <td class="name">${esc(i?.nombre||'?')}<span class="sub">Lote #${c.id}</span></td>
+      <td class="r num">${qty(c.cantidad)} ${esc(i?.unidad||'')}</td>
+      <td class="r num">${S_(c.pagado)}</td>
+      <td>${c.fiscal?badge('good','Con factura'):badge('neutral','Sin comprobante')}</td>
+      <td class="r num" style="font-weight:700">${S_(costeado)}</td>
+      <td class="r num">${S_(Math.round(loteCostoUnit(c)*100)/100)}</td>
+      <td class="r num">${qty(rest)}
+        ${rest<=0?'<span class="sub">consumido</span>':''}</td></tr>`;
+  }).join('');
+  const conF = ST.compras.filter(c=>c.fiscal), igvRec = conF.reduce((s,c)=>s+(c.pagado-bruto2neto(c.pagado)),0);
+
+  $('#view').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Pagado en compras</div>
+        <div class="val">${S_(ST.compras.reduce((s,c)=>s+c.pagado,0))}</div>
+        <div class="foot">Lo que salió del bolsillo</div></div>
+      <div class="kpi"><div class="lab">Costeado al inventario</div>
+        <div class="val">${S_(ST.compras.reduce((s,c)=>s+loteCosteado(c),0))}</div>
+        <div class="foot">Base del margen por plato</div></div>
+      <div class="kpi"><div class="lab">IGV recuperable</div>
+        <div class="val" style="color:#0a7d0a">${S_(igvRec)}</div>
+        <div class="foot">${conF.length} de ${ST.compras.length} lotes con factura</div></div>
+    </div>
+    <div class="card"><h2>Lotes</h2><div class="body">
+      <div class="note info">Cada compra <b>es</b> un lote FIFO. El orden de consumo es por fecha y, a igual fecha,
+        por número de lote. La marca de crédito fiscal decide si el lote se costea <b>neto</b> (el IGV se recupera,
+        no es costo del negocio) o al <b>precio pagado completo</b>.</div>
+      <div class="tablewrap"><table><thead><tr>
+        <th>Fecha</th><th>Insumo</th><th class="r">Cantidad</th><th class="r">Precio pagado</th>
+        <th>Crédito fiscal</th><th class="r">Costeado a</th><th class="r">Costo unit.</th><th class="r">Saldo del lote</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+    </div></div>`;
+};
+
+function nuevaCompra(){
+  const hoy = '2026-08-18';
+  const root = modal({
+    title:'Registrar compra',
+    sub:'Una compra crea un <b>lote</b>. El crédito fiscal cambia el costo con el que ese lote entra al inventario.',
+    wide:true,
+    body:`<div class="grid3">
+        <label class="f"><span>Insumo</span><select id="c-ins">
+          ${ST.insumos.map(i=>`<option value="${i.id}">${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('')}
+        </select></label>
+        <label class="f"><span>Cantidad</span><input class="num" id="c-cant" placeholder="0" inputmode="decimal"></label>
+        <label class="f"><span>Fecha de compra</span><input type="date" id="c-fecha" value="${hoy}" max="${hoy}"></label>
+      </div>
+      <label class="f"><span>Precio total pagado</span>
+        <input class="num" id="c-pag" placeholder="0.00" inputmode="decimal">
+        <span class="hint">El total del comprobante, tal como se pagó.</span></label>
+      <div class="switch on" id="c-sw" role="switch" aria-checked="true" tabindex="0">
+        <div class="track"><div class="knob"></div></div>
+        <div><b>La compra genera crédito fiscal</b>
+          <em>El proveedor emitió factura y el IGV se puede recuperar.</em></div>
+      </div>
+      <div id="c-eff" style="margin-top:20px"></div>
+      <div id="c-retro"></div>`,
+    footer:`<button class="btn-ghost" id="c-cancel">Cancelar</button><div class="spacer"></div>
+            <button class="btn-primary" id="c-save">Registrar compra</button>`
+  });
+
+  let fiscal = true;
+  const sw = root.querySelector('#c-sw'), ins = root.querySelector('#c-ins');
+  const cant = root.querySelector('#c-cant'), pag = root.querySelector('#c-pag'), fec = root.querySelector('#c-fecha');
+  const eff = root.querySelector('#c-eff'), retro = root.querySelector('#c-retro');
+
+  function toggle(){
+    fiscal = !fiscal;
+    sw.classList.toggle('on', fiscal);
+    sw.setAttribute('aria-checked', String(fiscal));
+    sw.querySelector('em').textContent = fiscal
+      ? 'El proveedor emitió factura y el IGV se puede recuperar.'
+      : 'Compra sin comprobante: el IGV no se recupera y es costo del negocio.';
+    paint();
+  }
+  sw.onclick = toggle;
+  sw.onkeydown = e => { if(e.key===' '||e.key==='Enter'){ e.preventDefault(); toggle(); } };
+
+  function paint(){
+    const i = insumo(+ins.value);
+    const q = parseFloat(String(cant.value).replace(',','.'));
+    const p = toCent(pag.value);
+    // aviso de compra retroactiva: FIFO ya pudo haber consumido lotes posteriores
+    const post = lotesFifo(+ins.value).filter(c=>c.fecha > fec.value && loteRestante(c.id) < c.cantidad);
+    retro.innerHTML = post.length
+      ? `<div class="note"><b>Compra con fecha retroactiva.</b> Ya hay ${post.length} lote${post.length>1?'s':''}
+         posterior${post.length>1?'es':''} de ${esc(i?.nombre||'')} parcialmente consumido${post.length>1?'s':''}.
+         Este lote pasa a ser el más antiguo con saldo, así que <b>los próximos consumos saldrán de acá</b>, pero
+         las ventas ya cerradas conservan el costo con el que se cerraron.</div>`
+      : '';
+    if(!Number.isFinite(q)||q<=0||!Number.isFinite(p)||p<=0){
+      eff.innerHTML = `<div class="effect"><h3>Costo de entrada al inventario</h3>
+        <div class="row"><span>Completá cantidad y precio pagado</span><span>—</span></div></div>`;
+      return;
+    }
+    const costeado = fiscal ? bruto2neto(p) : p;
+    const igv = p - bruto2neto(p);
+    const unit = Math.round(costeado/q*100)/100;
+    eff.innerHTML = `<div class="effect"><h3>Costo de entrada al inventario</h3>
+      <div class="row"><span>Precio pagado</span><span>${S_(p)}</span></div>
+      ${fiscal
+        ? `<div class="row"><span>IGV ${IGV_PCT}% recuperable</span>
+             <span style="color:#0a7d0a">− ${S_(igv)}</span></div>`
+        : `<div class="row"><span>IGV no recuperable</span>
+             <span style="color:var(--muted)">queda dentro del costo</span></div>`}
+      <div class="row total"><span>Costeado al inventario</span><span>${S_(costeado)}</span></div>
+      <div class="row"><span>Costo unitario del lote</span>
+        <span>${S_(unit)} / ${esc(i?.unidad||'u')}</span></div>
+      <div class="row"><span>Stock de ${esc(i?.nombre||'')} después</span>
+        <span>${qty(stock(+ins.value))} → ${qty(stock(+ins.value)+q)} ${esc(i?.unidad||'')}</span></div>
+      ${!fiscal?`<div class="hint">Sin crédito fiscal el costo entra ${pct(IGV_PCT)} más alto, y el margen de todo
+        plato que use este insumo baja. Es la diferencia real entre comprar con factura y sin ella.</div>`:''}</div>`;
+  }
+  [ins,cant,pag,fec].forEach(el=>{ el.oninput = paint; el.onchange = paint; });
+  paint();
+
+  root.querySelector('#c-cancel').onclick = closeModal;
+  root.querySelector('#c-save').onclick = ()=>{
+    clearErr(root);
+    let bad = false;
+    const q = parseFloat(String(cant.value).replace(',','.'));
+    if(!Number.isFinite(q)||q<=0){ fieldErr(cant,'Ingresá una cantidad mayor que cero.'); bad=true; }
+    const p = toCent(pag.value);
+    if(!Number.isFinite(p)||p<=0){ fieldErr(pag,'Ingresá el precio pagado.'); bad=true; }
+    if(!fec.value){ fieldErr(fec,'Elegí la fecha de la compra.'); bad=true; }
+    if(bad) return;
+    const c = {id:nid(), insumoId:+ins.value, cantidad:q, pagado:p, fiscal, fecha:fec.value};
+    ST.compras.push(c);
+    ST.movs.push({id:nid(), insumoId:c.insumoId, loteId:c.id, tipo:'entrada', cant:q,
+      costoUnit:loteCostoUnit(c), origen:'compra', ref:'Compra #'+c.id, fecha:c.fecha});
+    toast(`Lote #${c.id} registrado: ${qty(q)} ${insumo(c.insumoId).unidad} de ${insumo(c.insumoId).nombre}, costeado a ${S_(loteCosteado(c))}.`);
+    closeModal(); render();
+  };
+}
+
+/* ==================================================================
+   5 · MERMAS
+   ================================================================== */
+SCREENS.mermas = () => {
+  topAction('Registrar merma', nuevaMerma);
+  const rows = ST.mermas.length ? ST.mermas.map(m=>{
+    const i = insumo(m.insumoId);
+    return `<tr><td class="num">${m.fecha}</td>
+      <td class="name">${esc(i?.nombre||'?')}</td>
+      <td class="r num">${qty(m.cant)} ${esc(i?.unidad||'')}</td>
+      <td class="r num" style="color:var(--critical)">− ${S_(m.costo)}</td>
+      <td>${esc(m.motivo)}</td></tr>`;
+  }).join('') : '';
+
+  $('#view').innerHTML = `
+    <div class="note info">La merma registrada acá es <b>una pérdida medida</b>: baja stock y consume lotes FIFO,
+      igual que una venta. No la confundas con el <b>${ST.costos.merma}% de merma estimada</b> de la estructura de
+      costos, que es un supuesto y solo vive en el reporte. Las dos existen y no se suman a la misma cosa.</div>
+    <div class="card"><h2>Mermas registradas</h2><div class="body">
+      ${rows?`<div class="tablewrap"><table><thead><tr>
+        <th>Fecha</th><th>Insumo</th><th class="r">Cantidad</th><th class="r">Costo FIFO dado de baja</th><th>Motivo</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="effect" style="margin-top:20px"><div class="row total">
+        <span>Total dado de baja por merma</span>
+        <span>${S_(ST.mermas.reduce((s,m)=>s+m.costo,0))}</span></div></div>`
+      :`<div class="empty"><div class="big">Sin mermas registradas</div>
+        Registrá una cuando se rompa, se caiga o se pase un insumo. Convierte la pérdida en un dato
+        en lugar de un descuadre.</div>`}
+    </div></div>`;
+};
+
+function nuevaMerma(){
+  const root = modal({
+    title:'Registrar merma',
+    sub:'Baja de stock por pérdida real. Consume lotes FIFO y su costo sale del margen.',
+    body:`<div class="grid2">
+        <label class="f"><span>Insumo</span><select id="m-ins">
+          ${ST.insumos.map(i=>`<option value="${i.id}">${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('')}
+        </select></label>
+        <label class="f"><span>Cantidad perdida</span><input class="num" id="m-cant" placeholder="0" inputmode="decimal"></label>
+      </div>
+      <label class="f"><span>Motivo</span>
+        <textarea id="m-mot" placeholder="Ej. Se cortó la cadena de frío durante el corte de luz."></textarea>
+        <span class="hint">Obligatorio. Sin motivo, la merma es indistinguible de un faltante por robo o de una receta mal cargada.</span></label>
+      <div id="m-eff"></div>`,
+    footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+            <button class="btn-danger" id="ok">Registrar merma</button>`
+  });
+  const ins = root.querySelector('#m-ins'), cant = root.querySelector('#m-cant'), eff = root.querySelector('#m-eff');
+
+  function paint(){
+    const i = insumo(+ins.value), q = parseFloat(String(cant.value).replace(',','.'));
+    const cu = costoFifoUnit(+ins.value), disp = stock(+ins.value);
+    if(!Number.isFinite(q)||q<=0){
+      eff.innerHTML = `<div class="effect"><h3>Efecto</h3><div class="row">
+        <span>Stock disponible de ${esc(i?.nombre||'')}</span><span>${qty(disp)} ${esc(i?.unidad||'')}</span></div></div>`;
+      return;
+    }
+    const costo = cu===null?null:Math.round(cu*q);
+    const queda = disp - q;
+    eff.innerHTML = `<div class="effect"><h3>Efecto de esta merma</h3>
+      <div class="row"><span>Stock actual</span><span>${qty(disp)} ${esc(i?.unidad||'')}</span></div>
+      <div class="row"><span>Merma</span><span style="color:var(--critical)">− ${qty(q)} ${esc(i?.unidad||'')}</span></div>
+      <div class="row total"><span>Stock resultante</span>
+        <span style="${queda<0?'color:var(--serious)':''}">${qty(queda)} ${esc(i?.unidad||'')}</span></div>
+      <div class="row"><span>Costo FIFO que se da de baja</span>
+        <span>${costo===null?'no costeable':'− '+S_(costo)}</span></div>
+      ${queda<0?`<div class="hint" style="color:var(--serious);font-weight:600">La merma excede el stock. Se registra
+        igual y el stock queda negativo, pero eso significa que el libro ya venía desalineado del físico.</div>`:''}
+      ${queda>=0&&queda<=(i?.min||0)?`<div class="hint">Después de esta merma el insumo queda por debajo de su
+        mínimo de alerta (${qty(i.min)} ${esc(i.unidad)}).</div>`:''}</div>`;
+  }
+  ins.onchange = paint; cant.oninput = paint; paint();
+
+  root.querySelector('#c').onclick = closeModal;
+  root.querySelector('#ok').onclick = ()=>{
+    clearErr(root);
+    let bad=false;
+    const q = parseFloat(String(cant.value).replace(',','.'));
+    if(!Number.isFinite(q)||q<=0){ fieldErr(cant,'Ingresá la cantidad perdida.'); bad=true; }
+    const mot = root.querySelector('#m-mot');
+    if(mot.value.trim().length<5){ fieldErr(mot,'Describí el motivo (al menos 5 caracteres).'); bad=true; }
+    if(bad) return;
+    const iid = +ins.value, cu = costoFifoUnit(iid);
+    const costo = cu===null?0:Math.round(cu*q);
+    consumirFifo(iid, q, 'merma_registrada', 'Merma: '+mot.value.trim().slice(0,60), '2026-08-18', true);
+    ST.mermas.push({id:nid(), insumoId:iid, cant:q, costo, motivo:mot.value.trim(), fecha:'2026-08-18'});
+    toast(`Merma registrada: ${qty(q)} ${insumo(iid).unidad} de ${insumo(iid).nombre}, ${S_(costo)} dados de baja.`);
+    closeModal(); render();
+  };
+}
+
+/* ==================================================================
+   6 · INCIDENCIAS DE STOCK
+   ================================================================== */
+SCREENS.incidencias = () => {
+  const abiertas = ST.incidencias.filter(i=>!i.resuelta);
+  const cerradas = ST.incidencias.filter(i=>i.resuelta);
+
+  const row = x => {
+    const i = insumo(x.insumoId);
+    return `<tr>
+      <td class="num">${x.fecha}</td>
+      <td class="name">${esc(i?.nombre||'?')}</td>
+      <td class="r num" style="color:var(--serious);font-weight:700">− ${qty(x.faltante)} ${esc(i?.unidad||'')}</td>
+      <td>${esc(x.ref)}</td>
+      <td class="r num">${qty(stock(x.insumoId))} ${esc(i?.unidad||'')}</td>
+      <td class="r">${x.resuelta ? badge('good','Resuelta')
+        : `<button class="btn-ghost btn-sm" data-fix="${x.id}">Regularizar</button>`}</td></tr>`;
+  };
+
+  $('#view').innerHTML = `
+    <div class="note ${abiertas.length?'':'info'}">
+      ${abiertas.length
+        ? `<b>${abiertas.length} incidencia${abiertas.length>1?'s':''} sin regularizar.</b> Cada una es una venta que
+           se completó con stock insuficiente: el sistema <b>no frena la venta real</b>, la registra y deja el stock
+           negativo. El costeo usó el precio del último lote conocido.`
+        : `Sin incidencias abiertas. Acá aparecen las ventas que se completaron con stock insuficiente.`}
+    </div>
+    ${abiertas.length?`<div class="card"><h2>Pendientes</h2><div class="body"><div class="tablewrap"><table>
+      <thead><tr><th>Fecha</th><th>Insumo</th><th class="r">Faltante</th><th>Origen</th>
+        <th class="r">Stock actual</th><th class="r"></th></tr></thead>
+      <tbody>${abiertas.map(row).join('')}</tbody></table></div></div></div>`
+    :`<div class="card"><div class="body"><div class="empty">
+        <div class="big">Bandeja limpia</div>
+        Si esto se llena seguido, la causa no es el stock: son recetas mal cargadas o compras
+        registradas tarde.</div></div></div>`}
+    ${cerradas.length?`<div class="card"><h2>Regularizadas</h2><div class="body"><div class="tablewrap"><table>
+      <thead><tr><th>Fecha</th><th>Insumo</th><th class="r">Faltante</th><th>Origen</th>
+        <th class="r">Stock actual</th><th class="r">Estado</th></tr></thead>
+      <tbody>${cerradas.map(row).join('')}</tbody></table></div></div></div>`:''}`;
+
+  $('#view').querySelectorAll('[data-fix]').forEach(b=>b.onclick=()=>regularizar(+b.dataset.fix));
+};
+
+function regularizar(id){
+  const x = ST.incidencias.find(i=>i.id===id), i = insumo(x.insumoId);
+  const root = modal({
+    title:'Regularizar incidencia',
+    sub:`${esc(i.nombre)} quedó con ${qty(x.faltante)} ${esc(i.unidad)} sin lote de respaldo.`,
+    body:`<div class="note info">Regularizar <b>no reescribe la venta</b>: su costo quedó congelado al cerrarse
+        (ADR-0004). Lo que se corrige es el stock, para que el libro vuelva a coincidir con el físico.</div>
+      <label class="f"><span>Cómo se regulariza</span><select id="g-modo">
+        <option value="compra">Faltaba registrar una compra — la cargo ahora</option>
+        <option value="ajuste">El stock físico es correcto — ajusto el libro</option>
+        <option value="receta">La receta estaba mal cargada — la corrijo aparte</option>
+      </select></label>
+      <div id="g-x"></div>`,
+    footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+            <button class="btn-primary" id="ok">Marcar regularizada</button>`
+  });
+  const modo = root.querySelector('#g-modo'), extra = root.querySelector('#g-x');
+  function paint(){
+    extra.innerHTML = modo.value==='compra'
+      ? `<div class="note">Al cerrar esto, andá a <b>Compras</b> y registrá el lote con su fecha real. Si la fecha
+         es anterior a consumos ya hechos, el sistema te avisa del efecto FIFO.</div>`
+      : modo.value==='ajuste'
+      ? `<div class="note">Se agrega un movimiento de <b>ajuste</b> al libro por ${qty(x.faltante)} ${esc(i.unidad)}.
+         Queda registrado como ajuste, no como compra: no inventa un costo que nadie pagó.</div>`
+      : `<div class="note stop">Si la receta estaba mal, el problema no es el stock de hoy: es que <b>todas las ventas
+         anteriores costearon mal</b>. Corregí la receta en <b>Recetas</b> — las ventas cerradas no se recalculan.</div>`;
+  }
+  modo.onchange = paint; paint();
+
+  root.querySelector('#c').onclick = closeModal;
+  root.querySelector('#ok').onclick = ()=>{
+    if(modo.value==='ajuste'){
+      ST.movs.push({id:nid(), insumoId:x.insumoId, loteId:null, tipo:'entrada', cant:x.faltante,
+        costoUnit:0, origen:'ajuste', ref:'Ajuste por incidencia #'+x.id, fecha:'2026-08-18'});
+    }
+    x.resuelta = true;
+    toast('Incidencia regularizada. La venta original conserva su costo congelado.');
+    closeModal(); render();
+  };
+}
+
+/* ==================================================================
+   7 · ESTRUCTURA DE COSTOS
+   ================================================================== */
+SCREENS.costos = () => {
+  const c = ST.costos;
+  const fijos = c.cocina + c.admin + c.indirectos;
+  const sueldosMeseros = ST.personas.filter(p=>p.rol==='mesero'&&p.activo).reduce((s,p)=>s+p.sueldo,0);
+
+  $('#view').innerHTML = `
+    <div class="note"><b>Versionada por vigencia.</b> Guardar no edita los valores actuales: crea una versión nueva
+      con fecha de vigencia. Cambiar un porcentaje <b>no puede alterar un periodo ya reportado</b>, porque entonces
+      el mismo mes daría dos resultados distintos según cuándo lo mires.</div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Vigente desde</div><div class="val" style="font-size:20px">${c.vigenteDesde}</div>
+        <div class="foot">Versión en uso</div></div>
+      <div class="kpi"><div class="lab">Costos fijos / mes</div><div class="val">${S_(fijos + sueldosMeseros)}</div>
+        <div class="foot">Incluye ${S_(sueldosMeseros)} de sueldos de meseros</div></div>
+      <div class="kpi"><div class="lab">Comisión por venta</div><div class="val">${c.comision}%</div>
+        <div class="foot">Sobre la venta neta cobrada</div></div>
+      <div class="kpi"><div class="lab">Merma estimada</div><div class="val">${c.merma}%</div>
+        <div class="foot">Sobre el costo de insumos</div></div>
+    </div>
+
+    <div class="card"><h2>Costos fijos mensuales</h2><div class="body">
+      <div class="grid3">
+        <label class="f"><span>Salarios de cocina (flat)</span><input class="num" id="k-cocina" value="${(c.cocina/100).toFixed(2)}"></label>
+        <label class="f"><span>Salarios administrativos (flat)</span><input class="num" id="k-admin" value="${(c.admin/100).toFixed(2)}"></label>
+        <label class="f"><span>Costos indirectos del local</span><input class="num" id="k-ind" value="${(c.indirectos/100).toFixed(2)}"></label>
+      </div>
+      <div class="hint">Los sueldos fijos de meseros no se cargan acá: salen de <b>Personal y roles</b>, uno por persona.</div>
+    </div></div>
+
+    <div class="card"><h2>Costos variables por venta</h2><div class="body">
+      <div class="grid3">
+        <label class="f"><span>Comisión del mesero (%)</span><input class="num" id="k-com" value="${c.comision}">
+          <span class="hint">Sobre la venta <b>neta</b>, no sobre el total cobrado.</span></label>
+        <label class="f"><span>Merma estimada (%)</span><input class="num" id="k-mer" value="${c.merma}">
+          <span class="hint">Supuesto sobre el costo de insumos. Las mermas <b>medidas</b> van aparte.</span></label>
+        <label class="f"><span>IGV (%)</span><input class="num" id="k-igv" value="${c.igv}">
+          <span class="hint">18% en Perú. Cambiarlo afecta todo precio de carta.</span></label>
+      </div>
+    </div></div>
+
+    <div class="card"><h2>Efecto de guardar</h2><div class="body">
+      <div id="k-eff"></div>
+      <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end">
+        <button class="btn-ghost" id="k-reset">Descartar</button>
+        <button class="btn-primary" id="k-save">Crear nueva versión</button>
+      </div>
+    </div></div>`;
+
+  const get = id => parseFloat(String($('#'+id).value).replace(',','.'));
+  function paint(){
+    const com = get('k-com'), mer = get('k-mer');
+    const rows = ST.platos.map(p=>{
+      const costo = costoReceta(p.id); if(costo===null) return null;
+      const antes = p.neto - costo - Math.round(costo*ST.costos.merma/100);
+      const desp  = p.neto - costo - Math.round(costo*(Number.isFinite(mer)?mer:ST.costos.merma)/100);
+      return {p, antes, desp};
+    }).filter(Boolean);
+    const dAntes = rows.reduce((s,r)=>s+r.antes,0), dDesp = rows.reduce((s,r)=>s+r.desp,0);
+    const cambioMerma = Number.isFinite(mer) && mer!==ST.costos.merma;
+    const cambioCom = Number.isFinite(com) && com!==ST.costos.comision;
+
+    $('#k-eff').innerHTML = `<div class="effect">
+      <h3>Sobre el margen de los platos costeables</h3>
+      <div class="row"><span>Margen unitario sumado — versión vigente</span><span>${S_(dAntes)}</span></div>
+      <div class="row"><span>Margen unitario sumado — versión nueva</span><span>${S_(dDesp)}</span></div>
+      <div class="row total"><span>Diferencia</span>
+        <span class="${dDesp>=dAntes?'delta up':'delta down'}" style="font-size:22px">
+          ${dDesp===dAntes?'sin cambio':(dDesp>dAntes?'▲ ':'▼ ')+S_(Math.abs(dDesp-dAntes))}</span></div>
+      ${cambioCom?`<div class="hint">La comisión pasa de ${ST.costos.comision}% a ${com}%: afecta el margen de
+        contribución diario, no el margen por plato.</div>`:''}
+      ${cambioMerma?`<div class="hint">La merma estimada pasa de ${ST.costos.merma}% a ${mer}%.</div>`:''}
+      <div class="hint" style="margin-top:12px"><b>Los periodos ya reportados no cambian.</b> La versión nueva rige
+        desde su fecha de vigencia hacia adelante.</div></div>`;
+  }
+  ['k-cocina','k-admin','k-ind','k-com','k-mer','k-igv'].forEach(id=>{ $('#'+id).oninput = paint; });
+  paint();
+
+  $('#k-reset').onclick = render;
+  $('#k-save').onclick = ()=>{
+    const vals = {cocina:toCent($('#k-cocina').value), admin:toCent($('#k-admin').value),
+      indirectos:toCent($('#k-ind').value), comision:get('k-com'), merma:get('k-mer'), igv:get('k-igv')};
+    for(const [k,v] of Object.entries(vals)){
+      if(!Number.isFinite(v) || v<0){ toast('Hay un valor inválido en la estructura de costos. Revisá los campos.'); return; }
+    }
+    if(vals.comision>100||vals.merma>100||vals.igv>100){ toast('Los porcentajes no pueden pasar de 100.'); return; }
+    Object.assign(ST.costos, vals, {vigenteDesde:'2026-08-18'});
+    toast('Nueva versión vigente desde 2026-08-18. Los periodos anteriores conservan la versión con la que se reportaron.');
+    render();
+  };
+};
+
+/* ==================================================================
+   8 · PERSONAL Y ROLES
+   ================================================================== */
+SCREENS.personal = () => {
+  topAction('Nueva persona', ()=>editPersona(null));
+  const rows = ST.personas.map(p=>{
+    const pend = ST.propinas.filter(t=>t.meseroId===p.id&&t.estado==='pendiente').reduce((s,t)=>s+t.monto,0);
+    return `<tr>
+      <td class="name">${esc(p.nombre)}</td>
+      <td>${badge(p.rol==='administrador'?'neutral':p.rol==='cocina'?'neutral':'good', ROL[p.rol])}</td>
+      <td class="r num">${S_(p.sueldo)}</td>
+      <td>${usaPin(p.rol)
+        ? `<span class="num" style="letter-spacing:.2em">${p.pin?'••••':'—'}</span>`
+        : `<span style="font-size:12px;color:var(--faint)">No usa PIN</span>`}</td>
+      <td class="r num">${p.rol==='mesero'&&pend?S_(pend):'—'}</td>
+      <td>${p.activo?badge('good','Activo'):badge('neutral','Inactivo')}</td>
+      <td class="r"><div class="actions">
+        <button class="btn-ghost btn-sm" data-ed="${p.id}">Editar</button>
+        <button class="btn-ghost btn-sm" data-pin="${p.id}" ${usaPin(p.rol)?'':'disabled'}>Nuevo PIN</button>
+        <button class="btn-ghost btn-sm" data-act="${p.id}">${p.activo?'Desactivar':'Reactivar'}</button>
+      </div></td></tr>`;
+  }).join('');
+
+  $('#view').innerHTML = `
+    <div class="note info"><b>Tres roles, no cuatro.</b> El rol de <b>cajero desapareció</b> en la v1.2: cobrar es
+      una función del mesero sobre sus propias mesas, atribuida a su PIN en sesión. No hay un login extra para cobrar.<br><br>
+      <b>Cocina no usa PIN.</b> No abre sesión en ninguna superficie: la pantalla de pared es solo lectura y la estación
+      de cocina se inicia sin identificarse (ADR-0016). Una persona de cocina existe acá para la estructura de costos,
+      no para entrar al sistema.</div>
+    <div class="card"><h2>Personas</h2><div class="body"><div class="tablewrap"><table>
+      <thead><tr><th>Nombre</th><th>Rol</th><th class="r">Sueldo fijo / mes</th><th>PIN</th>
+        <th class="r">Propinas pendientes</th><th>Estado</th><th class="r">Acciones</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      <div class="hint" style="margin-top:16px">Una persona no se borra: se <b>desactiva</b>. Sus ventas, comisiones y
+        propinas la referencian, y borrarla dejaría huérfano el histórico.</div>
+    </div></div>`;
+
+  $('#view').querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>editPersona(+b.dataset.ed));
+  $('#view').querySelectorAll('[data-pin]').forEach(b=>b.onclick=()=>nuevoPin(+b.dataset.pin));
+  $('#view').querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>toggleActivo(+b.dataset.act));
+};
+const ROL = {mesero:'Mesero', cocina:'Cocina', administrador:'Administrador'};
+// Cocina no abre sesión en ninguna superficie (ADR-0016): no tiene PIN que gestionar.
+const usaPin = rol => rol !== 'cocina';
+
+function editPersona(id){
+  const p = id ? persona(id) : {id:null, nombre:'', rol:'mesero', sueldo:120000, pin:'', activo:true};
+  const root = modal({
+    title: id?'Editar persona':'Nueva persona',
+    body:`<label class="f"><span>Nombre completo</span><input id="p-nom" value="${esc(p.nombre)}" placeholder="Ej. Carla Ramírez"></label>
+      <div class="grid3">
+        <label class="f"><span>Rol</span><select id="p-rol">
+          ${Object.entries(ROL).map(([k,v])=>`<option value="${k}" ${k===p.rol?'selected':''}>${v}</option>`).join('')}
+        </select></label>
+        <label class="f"><span>Sueldo fijo mensual</span><input class="num" id="p-sue" value="${(p.sueldo/100).toFixed(2)}"></label>
+        <label class="f"><span>PIN de 4 dígitos</span><input class="num" id="p-pin" value="${esc(p.pin)}" maxlength="4" placeholder="0000" inputmode="numeric"></label>
+      </div>
+      <div id="p-nota"></div>`,
+    footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+            <button class="btn-primary" id="ok">Guardar</button>`
+  });
+  const rolSel = root.querySelector('#p-rol'), pinInp = root.querySelector('#p-pin');
+  const nota = root.querySelector('#p-nota');
+  function paintRol(){
+    const con = usaPin(rolSel.value);
+    pinInp.disabled = !con;
+    pinInp.parentNode.style.opacity = con ? '1' : '.45';
+    if(!con) pinInp.value = '';
+    nota.innerHTML = con
+      ? `<div class="note info" style="margin:0">El PIN se teclea en una pantalla <b>a la vista del salón</b>. Cuatro
+         dígitos es lo que el PRD fija, así que no es un secreto fuerte: la trazabilidad se apoya en que la sesión
+         es corta, no en que el PIN sea difícil.</div>`
+      : `<div class="note info" style="margin:0"><b>Cocina no usa PIN.</b> No abre sesión en ninguna superficie: la
+         pantalla de pared es solo lectura y la estación de cocina se inicia sin identificarse (ADR-0016).</div>`;
+  }
+  rolSel.onchange = paintRol; paintRol();
+
+  root.querySelector('#c').onclick = closeModal;
+  root.querySelector('#ok').onclick = ()=>{
+    clearErr(root);
+    const nom = root.querySelector('#p-nom'), sue = root.querySelector('#p-sue'), pin = root.querySelector('#p-pin');
+    let bad = false;
+    if(nom.value.trim().length<3){ fieldErr(nom,'Ingresá el nombre completo.'); bad=true; }
+    const s = toCent(sue.value);
+    if(!Number.isFinite(s)||s<0){ fieldErr(sue,'Ingresá un sueldo válido.'); bad=true; }
+    if(usaPin(rolSel.value)){
+      if(!/^\d{4}$/.test(pin.value)){ fieldErr(pin,'El PIN son exactamente 4 dígitos.'); bad=true; }
+      else if(ST.personas.some(x=>x.pin===pin.value && x.pin && x.id!==id)){
+        fieldErr(pin,'Ese PIN ya está en uso. Dos personas con el mismo PIN rompen la atribución de ventas y propinas.'); bad=true;
+      }
+    }
+    if(bad) return;
+    if(id){ Object.assign(p,{nombre:nom.value.trim(), rol:root.querySelector('#p-rol').value, sueldo:s, pin:pin.value}); }
+    else{ ST.personas.push({id:nid(), nombre:nom.value.trim(), rol:root.querySelector('#p-rol').value, sueldo:s, pin:pin.value, activo:true}); }
+    toast(`${nom.value.trim()} guardado.`);
+    closeModal(); render();
+  };
+}
+function nuevoPin(id){
+  const p = persona(id);
+  if(!usaPin(p.rol)){ toast(`${p.nombre} es de cocina y no usa PIN: no abre sesión en ninguna superficie.`); return; }
+  let n; do { n = String(Math.floor(1000+Math.random()*9000)); } while(ST.personas.some(x=>x.pin===n));
+  const root = modal({
+    title:'Nuevo PIN',
+    sub:`Para ${esc(p.nombre)}.`,
+    body:`<div class="effect"><h3>PIN generado</h3><div class="row total">
+        <span>Nuevo PIN</span><span style="letter-spacing:.3em">${n}</span></div></div>
+      <div class="note" style="margin-top:20px">Anotalo ahora: el sistema guarda el <b>hash</b>, no el PIN. Después de
+        cerrar esto no se puede volver a mostrar.</div>`,
+    footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+            <button class="btn-primary" id="ok">Confirmar cambio</button>`
+  });
+  root.querySelector('#c').onclick = closeModal;
+  root.querySelector('#ok').onclick = ()=>{ p.pin=n; toast(`PIN de ${p.nombre} actualizado.`); closeModal(); render(); };
+}
+function toggleActivo(id){
+  const p = persona(id);
+  if(p.activo){
+    const pend = ST.propinas.filter(t=>t.meseroId===id&&t.estado==='pendiente').reduce((s,t)=>s+t.monto,0);
+    const root = modal({
+      title:`¿Desactivar a ${esc(p.nombre)}?`,
+      sub:'No podrá abrir sesión en ninguna estación. Su histórico queda intacto.',
+      body: pend
+        ? `<div class="note stop"><b>Tiene ${S_(pend)} de propinas sin liquidar.</b> Desactivarla no cancela esa
+           deuda: es dinero que el negocio le debe. Liquidalas antes o quedará pendiente contra una persona inactiva.</div>`
+        : `<div class="note info">No tiene propinas pendientes.</div>`,
+      footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+              <button class="btn-danger" id="ok">Desactivar</button>`
+    });
+    root.querySelector('#c').onclick = closeModal;
+    root.querySelector('#ok').onclick = ()=>{ p.activo=false; toast(`${p.nombre} desactivado.`); closeModal(); render(); };
+  } else { p.activo=true; toast(`${p.nombre} reactivado.`); render(); }
+}
+
+/* ==================================================================
+   9 · PROPINAS POR LIQUIDAR
+   ================================================================== */
+SCREENS.propinas = () => {
+  const meseros = ST.personas.filter(p=>p.rol==='mesero');
+  const saldo = m => {
+    const ps = ST.propinas.filter(t=>t.meseroId===m.id&&t.estado==='pendiente');
+    return {
+      efectivo: ps.filter(t=>t.origen==='efectivo').reduce((s,t)=>s+t.monto,0),
+      pos:      ps.filter(t=>t.origen==='pos').reduce((s,t)=>s+t.monto,0),
+    };
+  };
+  const totalPos = meseros.reduce((s,m)=>s+saldo(m).pos,0);
+  const totalEf  = meseros.reduce((s,m)=>s+saldo(m).efectivo,0);
+
+  const rows = meseros.map(m=>{
+    const s = saldo(m), tot = s.efectivo + s.pos;
+    return `<tr>
+      <td class="name">${esc(m.nombre)}${m.activo?'':'<span class="sub">Inactivo</span>'}</td>
+      <td class="r num" style="color:var(--faint)">${S_(s.efectivo)}</td>
+      <td class="r num" style="font-weight:700">${S_(s.pos)}</td>
+      <td class="r num">${S_(tot)}</td>
+      <td class="r"><button class="btn-ghost btn-sm" data-liq="${m.id}" ${s.pos?'':'disabled'}>Liquidar POS</button></td>
+    </tr>`;
+  }).join('');
+
+  const hist = ST.liquidaciones.length ? ST.liquidaciones.slice().reverse().map(l=>
+    `<tr><td class="num">${l.fecha}</td><td class="name">${esc(persona(l.meseroId)?.nombre||'?')}</td>
+     <td class="r num">${S_(l.monto)}</td></tr>`).join('') : '';
+
+  $('#view').innerHTML = `
+    <div class="note info"><b>Las propinas no atraviesan el estado de resultados.</b> No son ingreso ni gasto: son
+      dinero que pasa por el negocio y le pertenece al mesero. Por eso viven acá y no en el margen.</div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="lab">Por liquidar — POS</div><div class="val">${S_(totalPos)}</div>
+        <div class="foot">Entró a la cuenta del negocio. Se debe pagar</div></div>
+      <div class="kpi"><div class="lab">En efectivo — ya en su poder</div>
+        <div class="val" style="color:#0a7d0a">${S_(totalEf)}</div>
+        <div class="foot">Se lo quedó en su cierre de turno. No se liquida</div></div>
+      <div class="kpi"><div class="lab">Liquidado histórico</div>
+        <div class="val">${S_(ST.liquidaciones.reduce((s,l)=>s+l.monto,0))}</div>
+        <div class="foot">${ST.liquidaciones.length} liquidación${ST.liquidaciones.length===1?'':'es'}</div></div>
+    </div>
+
+    <div class="card"><h2>Saldo por mesero</h2><div class="body">
+      <div class="note">Solo se liquida la propina <b>por terminal POS</b>. La propina en efectivo el mesero ya la
+        tiene físicamente: se la restó de lo que entregó en su cierre de turno. Liquidarla otra vez sería pagarla dos veces.</div>
+      <div class="tablewrap"><table><thead><tr>
+        <th>Mesero</th><th class="r">Efectivo (en su poder)</th><th class="r">POS (por pagar)</th>
+        <th class="r">Total pendiente</th><th class="r"></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    </div></div>
+
+    ${hist?`<div class="card"><h2>Liquidaciones anteriores</h2><div class="body"><div class="tablewrap"><table>
+      <thead><tr><th>Fecha</th><th>Mesero</th><th class="r">Monto</th></tr></thead>
+      <tbody>${hist}</tbody></table></div></div></div>`:''}`;
+
+  $('#view').querySelectorAll('[data-liq]').forEach(b=>b.onclick=()=>liquidar(+b.dataset.liq));
+};
+
+function liquidar(id){
+  const m = persona(id);
+  const ps = ST.propinas.filter(t=>t.meseroId===id&&t.estado==='pendiente'&&t.origen==='pos');
+  const total = ps.reduce((s,t)=>s+t.monto,0);
+  const ef = ST.propinas.filter(t=>t.meseroId===id&&t.estado==='pendiente'&&t.origen==='efectivo')
+    .reduce((s,t)=>s+t.monto,0);
+
+  const root = modal({
+    title:`Liquidar propinas de ${esc(m.nombre)}`,
+    sub:'Solo las propinas por terminal POS. Es una acción irreversible.',
+    body:`<div class="effect"><h3>Lo que se liquida</h3>
+        <div class="row"><span>Propinas por POS pendientes (${ps.length})</span><span>${S_(total)}</span></div>
+        <div class="row"><span>Propinas en efectivo</span>
+          <span style="color:#0a7d0a">${S_(ef)} — no se liquidan</span></div>
+        <div class="row total"><span>A pagar al mesero</span><span>${S_(total)}</span></div></div>
+      <div class="note" style="margin-top:20px">Al confirmar, esas ${ps.length} propinas pasan a <b>liquidadas</b> y el
+        saldo vuelve a cero. Queda registrada la liquidación con su fecha. <b>No hay reverso.</b></div>`,
+    footer:`<button class="btn-ghost" id="c">Cancelar</button><div class="spacer"></div>
+            <button class="btn-primary" id="ok">Confirmar y liquidar ${S_(total)}</button>`
+  });
+  root.querySelector('#c').onclick = closeModal;
+  root.querySelector('#ok').onclick = ()=>{
+    ps.forEach(t=>t.estado='liquidada');
+    ST.liquidaciones.push({id:nid(), meseroId:id, monto:total, fecha:'2026-08-18'});
+    toast(`${S_(total)} liquidados a ${m.nombre}. Su saldo por POS quedó en cero.`);
+    closeModal(); render();
+  };
+}
+
+render();
+</script>
+</body>
+</html>

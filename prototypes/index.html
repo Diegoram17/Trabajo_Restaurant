@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototipos · POS Restaurante</title>
+<style>
+  :root {
+    --ink: #151515;
+    --muted: #555;
+    --faint: #777;
+    --bg: #faf9f5;
+    --card: #fff;
+    --line: #e6e6e6;
+    --primary: #e31c23;
+    --good: #0ca30c;
+    --warning: #fab219;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    padding: 48px 24px 72px;
+  }
+  main { max-width: 880px; margin: 0 auto; }
+  header { margin-bottom: 40px; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin-top: 10px; max-width: 62ch; }
+  h2 {
+    font-size: 13px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--faint);
+    margin: 40px 0 14px;
+  }
+  .grid { display: grid; gap: 14px; }
+  a.card {
+    display: block; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 20px 22px; text-decoration: none; color: inherit;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  a.card:hover { border-color: var(--ink); transform: translateY(-1px); }
+  a.card:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+  .row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .name { font-size: 20px; font-weight: 700; }
+  .badge {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 4px 9px; border-radius: 999px;
+    border: 1px solid currentColor; white-space: nowrap;
+  }
+  .badge.ok { color: var(--good); }
+  .badge.new { color: #8a6100; }
+  .badge.draft { color: var(--faint); }
+  .desc { color: var(--muted); font-size: 15px; margin-top: 8px; }
+  .file { font: 400 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--faint); margin-top: 10px; }
+  .note {
+    border-left: 3px solid var(--warning); padding: 14px 18px; margin-top: 40px;
+    background: #fff; border-radius: 0 10px 10px 0; font-size: 15px; color: var(--muted);
+  }
+  .note strong { color: var(--ink); }
+  footer { margin-top: 44px; font-size: 14px; color: var(--faint); }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Prototipos · POS Restaurante</h1>
+    <p class="sub">
+      Páginas ejecutables con flujo y estado real, no imágenes. Se abren sin servidor.
+      El nivel de validación decide quién gana cuando un prototipo y un documento se contradicen.
+    </p>
+  </header>
+
+  <h2>Validado — es la referencia</h2>
+  <div class="grid">
+    <a class="card" href="estacion-mesero.html">
+      <span class="row">
+        <span class="name">Estación del mesero</span>
+        <span class="badge ok">Validado</span>
+      </span>
+      <span class="desc">
+        PIN, mesas, toma de pedido, anulación por cantidad, cobro con comprobante y propina,
+        división de cuenta, cobros del turno y cierre de turno. Flujo probado y corregido:
+        si un documento discrepa, se corrige el documento.
+      </span>
+      <span class="file">estacion-mesero.html</span>
+    </a>
+  </div>
+
+  <h2>Rediseñado — pendiente de validación</h2>
+  <div class="grid">
+    <a class="card" href="gestion-administrativa.html">
+      <span class="row">
+        <span class="name">Gestión administrativa</span>
+        <span class="badge new">Sin validar</span>
+      </span>
+      <span class="desc">
+        Nueve pantallas en tres grupos: catálogo (menú, combos, recetas), inventario (insumos, compras,
+        mermas, incidencias) y negocio (costos, personal, propinas). Escritura real con validación:
+        toda operación que mueve dinero muestra su efecto antes de guardar, y ninguna baja es silenciosa.
+        Reescrito el 2026-08-18 — verificado automáticamente, pero nadie lo probó a mano todavía.
+      </span>
+      <span class="file">gestion-administrativa.html</span>
+    </a>
+  </div>
+
+  <h2>Borradores — no validados</h2>
+  <div class="grid">
+    <a class="card" href="kds-cocina.html">
+      <span class="row">
+        <span class="name">KDS · Cocina</span>
+        <span class="badge draft">Borrador</span>
+      </span>
+      <span class="desc">Cola de comandas en orden FIFO, marcado de preparada, aviso de anulación y estado de conexión.</span>
+      <span class="file">kds-cocina.html</span>
+    </a>
+    <a class="card" href="panel-administracion.html">
+      <span class="row">
+        <span class="name">Panel de administración</span>
+        <span class="badge draft">Borrador</span>
+      </span>
+      <span class="desc">Dashboard de rentabilidad en dos niveles, platos vendidos y rentables, comisiones, propinas y auditoría.</span>
+      <span class="file">panel-administracion.html</span>
+    </a>
+  </div>
+
+  <p class="note">
+    <strong>La caja no está acá porque ya no existe.</strong>
+    Desde el PRD v1.2 se eliminó el rol de cajero: cobrar y cerrar turno son modos de la estación del
+    mesero, no una superficie propia.
+  </p>
+
+  <footer>
+    Prototipos de referencia. <code>PRD.md</code> y <code>TECH-DESIGN.md</code> son la fuente de verdad;
+    estos archivos se actualizan cuando el proyecto lo requiera ·
+    deuda abierta en <a href="../REVISION-ADVERSARIAL.md">REVISION-ADVERSARIAL.md</a>
+  </footer>
+</main>
+</body>
+</html>
