@@ -9,11 +9,11 @@
 | Chained PRs recommended | Yes |
 | Suggested split | PR 1 (rounding) → PR 2 (operational day/trigger) → PR 3 (data access, consumes PR 2) |
 | Delivery strategy | ask-on-risk |
-| Chain strategy | pending (suggested: stacked-to-main — PR 1 and PR 2 are mutually independent; PR 3 depends only on PR 2) |
+| Chain strategy | stacked-to-main (user-approved 2026-08-20) — PR 1 and PR 2 are mutually independent; PR 3 depends only on PR 2 |
 
-Decision needed before apply: Yes
+Decision needed before apply: Resolved — stacked-to-main, user-approved 2026-08-20
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: stacked-to-main
 400-line budget risk: High
 
 ### Suggested Work Units
@@ -26,15 +26,15 @@ Chain strategy: pending
 
 ## Phase 1: Rounding domain (PR 1, pure)
 
-- [ ] 1.1 RED `tests/unit/redondeo.test.ts`: `redondear` — 0.5/-0.5 half-up-symmetric, sub-cent (180g/1200g/S/50 → 750), `BigInt(1.5)` throws, safe-integer overflow throws
-- [ ] 1.2 GREEN `src/server/domain/redondeo.ts`: `redondear(numerador: bigint, denominador: bigint)` (D2-C, D2-D)
-- [ ] 1.3 RED same file: `porcentaje` — single rounding via `redondear(base*puntos,10000n)`; sum-of-rows vs aggregate-recalc test
-- [ ] 1.4 GREEN `redondeo.ts`: `porcentaje(base, puntos)`
-- [ ] 1.5 RED same file: `reparto` — Σparts=total property test; combo order (peso desc/clave asc); fixed-cost order (clave asc); non-total comparator throws; empty/zero-weight/negative-total throw
-- [ ] 1.6 GREEN `redondeo.ts`: `reparto<T>(total, partes, {ordenResiduo})` (D2-E)
-- [ ] 1.7 RED `tests/unit/sin-redondeo-suelto.test.ts`: zero occurrences of `Math.*`/`toFixed`/`parseFloat` under `src/server/**`
-- [ ] 1.8 Confirm 1.7 passes against current tree (no production fix expected)
-- [ ] 1.9 `TECH-DESIGN.md` (~line 780): add new `- [ ]` checkbox propagating `redondear`'s half-up-**symmetric-around-zero** rule (D2-D) — undocumented until now
+- [x] 1.1 RED `tests/unit/redondeo.test.ts`: `redondear` — 0.5/-0.5 half-up-symmetric, sub-cent (180g/1200g/S/50 → 750), `BigInt(1.5)` throws, safe-integer overflow throws
+- [x] 1.2 GREEN `src/server/domain/redondeo.ts`: `redondear(numerador: bigint, denominador: bigint)` (D2-C, D2-D)
+- [x] 1.3 RED same file: `porcentaje` — single rounding via `redondear(base*puntos,10000n)`; sum-of-rows vs aggregate-recalc test
+- [x] 1.4 GREEN `redondeo.ts`: `porcentaje(base, puntos)`
+- [x] 1.5 RED same file: `reparto` — Σparts=total property test; combo order (peso desc/clave asc); fixed-cost order (clave asc); non-total comparator throws; empty/zero-weight/negative-total throw
+- [x] 1.6 GREEN `redondeo.ts`: `reparto<T>(total, partes, {ordenResiduo})` (D2-E)
+- [x] 1.7 RED `tests/unit/sin-redondeo-suelto.test.ts`: zero occurrences of `Math.*`/`toFixed`/`parseFloat` under `src/server/**`
+- [x] 1.8 Confirm 1.7 passes against current tree (no production fix expected)
+- [x] 1.9 `TECH-DESIGN.md` (~line 780): add new `- [ ]` checkbox propagating `redondear`'s half-up-**symmetric-around-zero** rule (D2-D) — undocumented until now
 
 ## Phase 2: Operational day & vigencia trigger (PR 2, real PostgreSQL)
 

@@ -778,6 +778,7 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 ### Redondeo y exactitud monetaria (ADR-0032)
 
 - [ ] La función de redondeo es **una sola en todo el sistema**: al céntimo más cercano, medio hacia arriba. No hay ningún cálculo de dinero con otra.
+- [ ] El redondeo medio-hacia-arriba es **simétrico alrededor de cero**: `redondear(-n) = -redondear(n)`. Un monto negativo (por ejemplo, una anulación) no redondea "hacia +∞" —que llevaría a −0,5 a 0—, sino que redondea su magnitud y conserva el signo, igual que la verificación manual (ADR-0032 eligió medio-hacia-arriba precisamente por eso).
 - [ ] **Reparto (hay un total que respetar):** se trunca cada parte, y el residuo se asigna de a un céntimo en orden determinista hasta agotarlo. La suma de las partes da el total, **diferencia 0**, por construcción.
 - [ ] Los tres repartos del sistema son: precio de combo entre sus platos (orden: precio de lista descendente, empate por id — ADR-0029), costo fijo mensual entre días operativos (orden: día operativo ascendente), y costo del lote entre sus consumos (lo absorbe el movimiento que **agota** el lote).
 - [ ] **Porcentaje (no hay total que respetar):** se aplica medio-arriba en la fila más fina donde el importe se persiste, y todo nivel superior es una **suma** de esos enteros. **Ningún reporte recalcula un porcentaje sobre un agregado.**
