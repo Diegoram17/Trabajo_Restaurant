@@ -9,11 +9,11 @@
 | Chained PRs recommended | Yes |
 | Suggested split | PR 1 (rounding) → PR 2 (operational day/trigger) → PR 3 (data access, consumes PR 2) |
 | Delivery strategy | ask-on-risk |
-| Chain strategy | pending (suggested: stacked-to-main — PR 1 and PR 2 are mutually independent; PR 3 depends only on PR 2) |
+| Chain strategy | stacked-to-main (user-approved 2026-08-20) — PR 1 and PR 2 are mutually independent; PR 3 depends only on PR 2 |
 
-Decision needed before apply: Yes
+Decision needed before apply: Resolved — stacked-to-main, user-approved 2026-08-20
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: stacked-to-main
 400-line budget risk: High
 
 ### Suggested Work Units
@@ -38,12 +38,12 @@ Chain strategy: pending
 
 ## Phase 2: Operational day & vigencia trigger (PR 2, real PostgreSQL)
 
-- [ ] 2.1 Create `migrations/0002_dia_operativo_y_vigencia.sql`: `dia_operativo()` STABLE STRICT; `vigencia_no_retroactiva()` trigger fn (raises `23514`/`vigente_desde_no_retroactiva`); triggers on `configuracion_costos` + `calendario_apertura`
-- [ ] 2.2 RED `tests/integration/dia-operativo.test.ts`: ADR-0028 vectors (Sat 23:40, Sun 00:30, Sun 05:00 cutoff, Sun 05:01) + gap-free partition (04:59:59 vs 05:00:00)
-- [ ] 2.3 GREEN: run `npm run migrate` (2.1) against `TEST_DATABASE_URL`, confirm 2.2 passes
-- [ ] 2.4 RED `tests/integration/vigencia.test.ts`: reject `vigente_desde` = today's operational-day start minus 1s; accept at day start; accept `UPDATE` of another column on an old row — wrapped in `db.transaction()` + `ROLLBACK`
-- [ ] 2.5 GREEN: confirm 2.1's trigger satisfies 2.4 (no new code)
-- [ ] 2.6 Same file: `pg_constraint` catalog-query assertion — NO `CHECK` constraint mentions `dia_operativo` on either table (freezes P1 against a future silent trigger→CHECK "simplification")
+- [x] 2.1 Create `migrations/0002_dia_operativo_y_vigencia.sql`: `dia_operativo()` STABLE STRICT; `vigencia_no_retroactiva()` trigger fn (raises `23514`/`vigente_desde_no_retroactiva`); triggers on `configuracion_costos` + `calendario_apertura`
+- [x] 2.2 RED `tests/integration/dia-operativo.test.ts`: ADR-0028 vectors (Sat 23:40, Sun 00:30, Sun 05:00 cutoff, Sun 05:01) + gap-free partition (04:59:59 vs 05:00:00)
+- [x] 2.3 GREEN: run `npm run migrate` (2.1) against `TEST_DATABASE_URL`, confirm 2.2 passes
+- [x] 2.4 RED `tests/integration/vigencia.test.ts`: reject `vigente_desde` = today's operational-day start minus 1s; accept at day start; accept `UPDATE` of another column on an old row — wrapped in a per-test transaction + `ROLLBACK` (raw `pg.Client`, not `db.transaction()`: Kysely does not exist yet in PR 2, only arrives in Phase 3)
+- [x] 2.5 GREEN: confirm 2.1's trigger satisfies 2.4 (no new code)
+- [x] 2.6 Same file: `pg_constraint` catalog-query assertion — NO `CHECK` constraint mentions `dia_operativo` on either table (freezes P1 against a future silent trigger→CHECK "simplification")
 
 ## Phase 3: Data access layer (PR 3, consumes Phase 2)
 
