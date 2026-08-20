@@ -1,7 +1,7 @@
 # 📊 Dashboard de Seguimiento y Progreso
 
-> **Última actualización:** 2026-08-19  
-> **Estado General:** 0 / 30 Ítems Completados
+> **Última actualización:** 2026-08-20  
+> **Estado General:** 1 / 30 Ítems Completados
 
 ---
 
@@ -9,7 +9,7 @@
 
 ### Plataforma y Fundaciones (transversal)
 * **Feature / HU:** Como equipo, necesito una base ejecutable (backend, SPA, base de datos y migraciones) sobre la que se apoyen los seis módulos del producto.
-  - [ ] Ítem #1: Esqueleto de aplicación y esquema base
+  - [x] Ítem #1: Esqueleto de aplicación y esquema base — rama `feat/item-1-app-skeleton`, 8 commits, verificado (48 pruebas contra PostgreSQL real, 25 sin base)
 
 * **Feature / HU:** Como negocio, necesito que el dinero y el tiempo se calculen igual en todo el sistema — importes enteros, redondeo único y día operativo de 05:00 a 04:59.
   - [ ] Ítem #2: Núcleo de exactitud
