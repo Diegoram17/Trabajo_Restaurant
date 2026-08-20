@@ -95,10 +95,10 @@ La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del regist
 | [ADR-0028](adrs/0028-dia-operativo.md) | El día operativo arranca a las 05:00 y es la única unidad de día | Aceptado |
 | [ADR-0029](adrs/0029-el-combo-se-descompone-al-enviarse.md) | El combo se descompone al enviarse y no existe como fila de dominio | Aceptado |
 | [ADR-0030](adrs/0030-clave-de-ordenamiento-fifo.md) | El consumo FIFO se ordena por número de lote, no por fecha de compra | Aceptado |
-| [ADR-0031](adrs/0031-politica-de-acceso.md) | Tres capas de acceso: dispositivo, persona y llave de servicio | Aceptado, **completado por 0033, 0034, 0035 y 0036** |
+| [ADR-0031](adrs/0031-politica-de-acceso.md) | Tres capas de acceso: dispositivo, persona y llave de servicio | Aceptado, **completado por 0033, 0034, 0035 y 0036**, con mecanismo de estado en 0043 |
 | [ADR-0032](adrs/0032-regla-de-redondeo.md) | La regla de redondeo y su punto de aplicación | Aceptado, **completa 0011** |
 | [ADR-0033](adrs/0033-transporte-cifrado-y-atributos-de-sesion.md) | TLS con CA propia del local, y los atributos de sesión que habilita | Aceptado, **completa 0031**, sección 1 **reemplazada por 0037** |
-| [ADR-0034](adrs/0034-el-dispositivo-es-precondicion-del-pin.md) | El dispositivo es precondición del PIN, no de la contraseña | Aceptado, **completa 0031** |
+| [ADR-0034](adrs/0034-el-dispositivo-es-precondicion-del-pin.md) | El dispositivo es precondición del PIN, no de la contraseña | Aceptado, **completa 0031**, con mecanismo de estado en 0043 |
 | [ADR-0035](adrs/0035-el-evento-es-una-senal-y-el-stream-se-filtra-por-rol.md) | El evento es una señal de invalidación, y el stream se filtra por rol | Aceptado, **completa 0031, propaga 0013, precisa 0009** |
 | [ADR-0036](adrs/0036-el-hash-de-cada-secreto-lo-decide-su-entropia.md) | El hash de cada secreto lo decide su entropía, y el token tiene ciclo de vida | Aceptado, **completa 0031** |
 | [ADR-0037](adrs/0037-alojamiento-y-origen-unico.md) | El sistema corre alojado y con un solo origen | Aceptado, **reemplaza la sección 1 de 0033**, da piso a 0008, precisa 0015 |
@@ -107,6 +107,7 @@ La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del regist
 | [ADR-0040](adrs/0040-idioma-de-los-identificadores.md) | Los identificadores del dominio van en español | Aceptado, **precisa la regla de idioma**, apoya 0002 |
 | [ADR-0041](adrs/0041-transporte-en-desarrollo-local.md) | En desarrollo el proceso escucha en claro, atado a loopback | Aceptado, **precisa 0037** |
 | [ADR-0042](adrs/0042-capa-de-acceso-a-datos.md) | Kysely como capa de acceso a datos | Aceptado |
+| [ADR-0043](adrs/0043-estado-efimero-de-seguridad-en-postgresql.md) | El estado efímero de seguridad vive en PostgreSQL, no en el proceso | Aceptado, **da mecanismo a 0031 y 0034** |
 
 ## Modelo de datos
 
@@ -127,11 +128,21 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 
 ### Identidad y configuración
 
-- **`Persona`** — nombre, rol (`mesero` | `cocina` | `administrador`), `pin_hash`, `sueldo_fijo`, activo.
+- **`Persona`** — `nombre`, `rol` (`mesero` | `cocina` | `administrador`), `usuario`, `contrasena_hash`,
+  `debe_rotar_contrasena`, `pin_hash`, `sueldo_fijo`, `activo`.
   **No hay rol `cajero`.** `pin_hash` solo aplica a `mesero`: el PIN de cocina no es de una persona y vive
   en `CredencialCocina` (ADR-0018). **`/admin` va con usuario y contraseña**, no con PIN: hasheada con KDF de
   memoria dura y sesión de 60 min de inactividad (ADR-0031). Una
   `Persona` de rol `cocina` existe para costos y horarios, no para entrar al sistema.
+  Las tres columnas de acceso a `/admin` **solo existen en la fila del administrador**, y el esquema lo
+  exige en las dos direcciones: un administrador sin `usuario` no puede entrar, y un mesero con `usuario`
+  sería una segunda puerta al panel que nadie decidió abrir. `usuario` es **único y se guarda en
+  minúsculas**, para que dos grafías del mismo nombre no sean dos cuentas ni dos contadores de bloqueo.
+  `debe_rotar_contrasena` es un **campo explícito y no una inferencia**: deducir *"todavía es la
+  contraseña sembrada"* comparando contra el hash del arranque no tiene estado que probar y falla en
+  silencio el día que la comparación deja de valer. La rotación pendiente es una **puerta del servidor**,
+  no un aviso de pantalla: con la marca puesta, la sesión existe y **no autoriza ninguna otra acción de
+  `/admin`** hasta que la contraseña se rote (SEC-09).
   El `pin_hash` y la contraseña son secretos de **baja entropía**, así que los dos van con **Argon2id y
   sal única por credencial** (ADR-0036). Un KDF **no vuelve seguro** un PIN de 4 dígitos contra un volcado
   —10⁴ es forzable igual—: rompe la **precomputación masiva**, que es lo que convertía un volcado en todos
@@ -139,8 +150,11 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   La sal por credencial tiene un costo concreto: **no se puede buscar por hash**, así que la regla *"dos
   personas no pueden compartir PIN"* deja de ser un índice único y pasa a ser una comprobación explícita
   contra cada PIN activo al dar de alta.
-- **`Dispositivo`** — nombre, rol (`estacion` | `kds` | `cocina`), `token_hash`, `enrolado_en`,
-  **`expira_en`**, `revocado_en`. Es la **primera capa de acceso** (ADR-0031): autoriza leer el stream SSE y presentarse como
+- **`Dispositivo`** — `nombre`, `rol` (`estacion` | `kds` | `cocina`), `token_hash`, `token_sal`,
+  `enrolado_en`, **`expira_en`**, `rotado_en`, `revocado_en`.
+  **No existe el rol `admin`** y no es un olvido: `/admin` no se enrola, y de ahí sale que la cadena de
+  arranque se abra sola (ADR-0034).
+  Es la **primera capa de acceso** (ADR-0031): autoriza leer el stream SSE y presentarse como
   esa ruta, y **ninguna acción**. Se enrola desde `/admin`, el token se muestra una sola vez y viaja en
   cookie `httpOnly` — que es lo que `EventSource` sabe enviar sin headers.
   El **valor es de ≥ 128 bits de un CSPRNG** y su hash es **SHA-256 con sal**, no un KDF (ADR-0036): se
@@ -149,11 +163,39 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   entropía**: acortar el token rompe la decisión sin que nada falle ni avise.
   `expira_en` son **90 días con renovación automática mientras el dispositivo se use**, así que una
   pantalla en uso nunca vence y un **equipo perdido y apagado caduca solo**. Se puede **rotar el token sin
-  re-enrolar** el equipo, que es la salida para la sospecha sin certeza.
+  re-enrolar** el equipo, que es la salida para la sospecha sin certeza, y `rotado_en` deja la traza de
+  que se hizo.
+  La cookie lleva **`{id}.{token}`**, no el token solo: la sal por credencial impide encontrar la fila por
+  hash (ADR-0036), así que el identificador tiene que viajar al lado del secreto para poder ubicarla. El
+  identificador no es una credencial y no autoriza nada por sí mismo.
+  **La renovación se escribe a lo sumo una vez por dispositivo por día**, renovando solo cuando queda
+  menos de 89 días de vida: sin ese tope, cada request del stream sería una escritura. No hace falta
+  ninguna columna extra para acotarla — **`expira_en` es su propio limitador**.
 - **`CredencialCocina`** — `pin_hash` de **6 dígitos** (ADR-0031), `actualizada_en`, `actualizada_por`. Llave del ciclo del servicio,
   no identidad: se verifica al abrir y cerrar, **nunca** en el marcado (ADR-0018). Entidad propia y no un
   campo de configuración porque es un secreto: no se muestra y se rota por otro motivo.
   Como todo secreto de **baja entropía**, va con **Argon2id y sal única por credencial** (ADR-0036).
+- **`SesionAdmin`** — `id` (valor de ≥ 128 bits de un CSPRNG), `persona_id`, `token_hash`, `token_sal`,
+  `creada_en`, `ultima_actividad_en`, `revocada_en`.
+  La sesión de `/admin` es **una fila, no una cookie autocontenida** (ADR-0043): la cookie lleva
+  `{id}.{token}` y **no afirma nada por sí sola** —quién es su portador y hasta cuándo vale lo dice la
+  fila—. El token es de **alta entropía**, así que va con **SHA-256 con sal** y no con KDF (ADR-0036).
+  Los **60 minutos de inactividad** de ADR-0031 se miden contra `ultima_actividad_en`, que se actualiza a
+  lo sumo **una vez por minuto**: sin ese tope, cada lectura del panel sería una escritura.
+  **No sale de `ConfiguracionOperativa`.** `inactividad_sesion_min` es de la **sesión de estación**
+  (ADR-0014); los 60 minutos de `/admin` son de ADR-0031 y son otra cosa. Leer uno por el otro no rompe
+  nada visible: acorta o alarga una sesión en silencio.
+  `revocada_en` existe porque **rotar la contraseña tiene que matar las sesiones abiertas** de esa
+  persona, y una credencial firmada sin estado no se puede revocar.
+- **`BloqueoAcceso`** — clave `(ancla, valor_ancla)` con `ancla` en (`dispositivo` | `cuenta` | `ip`),
+  `fallos_consecutivos`, `bloqueos_consecutivos`, `bloqueado_hasta`, `ultimo_fallo_en`.
+  Es la escalera de ADR-0031 —5 intentos, 60 s, duplicación con tope de 15 min, reinicio con acierto—
+  **persistida**, con las **tres anclas** que ADR-0034 fijó y una fila por sujeto. Se persiste y no vive
+  en el proceso porque la instancia se duerme y se reinicia (ADR-0037, ADR-0043): un contador en memoria
+  no falla al reiniciarse, **se vacía**, y le devuelve al atacante sus cinco intentos sin que nada avise.
+  `valor_ancla` es **el valor tal como llegó** —el `usuario` que se tipeó, exista o no—, para que un
+  usuario inexistente se comporte exactamente igual que uno real y enumerar cuentas no sea gratis.
+  El acierto **borra la fila**: el contador no se pone en cero, deja de existir.
 - **`Turno`** — **mesero**, estación de apertura, `abierto_en`, `origen_apertura`
   (`marcado` | `primer_login`), `cerrado_en`, `cerrado_por` (`mesero` | `administrador`),
   `cerrado_en_propuesto`, `motivo_cierre_tardio`.
@@ -188,6 +230,11 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
   Versionada por vigencia, y
   **`vigente_desde` no admite fechas pasadas** (ADR-0022). Misma regla para `CalendarioApertura`, y misma
   autoría obligatoria: los dos son irreversibles hacia atrás y los dos mueven el estado de resultados.
+  **`creada_por` es clave foránea a `Persona` en las dos tablas.** La autoría que pide SEC-08 no sirve si
+  el autor es un entero que no resuelve a nadie: sin la restricción, una vigencia puede quedar firmada por
+  alguien que no existe, y el dato que se guardó para distinguir un error de carga de un cambio deliberado
+  no distingue nada. Por lo mismo **una `Persona` que firmó una vigencia no se borra** —se da de baja con
+  `activo`—, o la firma quedaría colgada.
 - **`ConfiguracionOperativa`** — `umbral_demora_min`, `inactividad_sesion_min`. Aparte de
   `ConfiguracionCostos` porque no son costos: no alteran importes, así que no se versionan. Los dos siguen
   **sin valor definido**. `bloqueo_mesa_min` **desapareció** con ADR-0017. Editables desde la pantalla de
@@ -485,6 +532,23 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - [ ] **La cadena de arranque se recorre entera desde una base vacía**, sin modo de primer arranque ni excepción temporal: el administrador sembrado entra a `/admin`, rota su contraseña, enrola las 5 pantallas —token más certificado raíz (ADR-0033)— y define la `CredencialCocina`. Recién ahí el salón puede vender comida.
 - [ ] La **revisión de pendientes** lista *PIN de cocina sin definir* y *ningún dispositivo enrolado*, junto a los platos sin receta y los insumos sin compras.
 - [ ] Desde una base vacía, el escenario simulado del PRD **recorre el ciclo completo sin ninguna intervención manual fuera del sistema**.
+
+**Mecanismo de arranque, administrador y dispositivo (BACKLOG #3)**
+
+- [ ] `npm run migrate && npm run db:seed` sobre una base vacía crea exactamente **una** fila en `persona` con `rol = administrador`, `usuario`, `contrasena_hash` y `debe_rotar_contrasena = true`; la contraseña en claro se imprime **una sola vez** por `stdout` y no se vuelve a mostrar ni a loguear.
+- [ ] Re-ejecutar `db:seed` sobre una base ya sembrada **no hace nada**: no crea un segundo administrador ni reimprime contraseña, salvo con `--regenerar-contrasena`, que re-arma `debe_rotar_contrasena` y reimprime una nueva.
+- [ ] `configuracion_costos` y `calendario_apertura` quedan con **una fila cada una**, `creada_por` apuntando al administrador sembrado, `vigente_desde = now()`; `configuracion_operativa` queda con su **única fila**.
+- [ ] `creada_por` de `configuracion_costos` y `calendario_apertura` lleva **clave foránea** a `persona.id`: insertar con un autor inexistente se rechaza en la base, no solo en la aplicación.
+- [ ] Iniciar sesión en `/admin` con un usuario inexistente y con una contraseña incorrecta para un usuario existente son **indistinguibles**: misma forma de respuesta y **tiempo de respuesta comparable**, sin filtrar cuál de los dos casos ocurrió.
+- [ ] `/admin` inicia sesión **sin cookie de dispositivo presente** (ADR-0034): el login no la exige ni la valida.
+- [ ] El login exitoso escribe una fila en `sesion_admin` y responde `Set-Cookie: __Host-sesion=…; Secure; HttpOnly; SameSite=Strict`; enrolar un dispositivo responde `Set-Cookie: __Host-dispositivo=…; Secure; HttpOnly; SameSite=Lax`. Ambos literales se **assertan en el header sin TLS** (ADR-0041).
+- [ ] La sesión de `/admin` expira a los **60 minutos sin actividad**; cada request autenticado extiende `ultima_actividad_en`, con **como máximo una escritura por minuto**.
+- [ ] Mientras `debe_rotar_contrasena` sea verdadero, **ninguna acción de `/admin` distinta de rotar la contraseña se ejecuta**: queda bloqueada hasta que la rotación se complete.
+- [ ] La escalera de bloqueo —5 intentos, 60 s, duplicación, tope 15 min, reinicio con acierto— se prueba **por separado** para el ancla `cuenta` y para el ancla `ip`, y el estado de `bloqueo_acceso` **sobrevive un reinicio del proceso**: no es un contador en memoria.
+- [ ] La IP de cliente se resuelve tomando el salto `TRUSTED_PROXY_HOPS` (default `1`) contado **desde la derecha** de `X-Forwarded-For`, con `req.socket.remoteAddress` como respaldo cuando el header falta y normalización de `::ffff:`; una IP no resoluble **cae a un balde compartido**, nunca queda sin contador.
+- [ ] Enrolar dos dispositivos produce tokens **sin relación deducible** entre sí; un token revocado, uno vencido y uno rotado-fuera-de-vigencia se **rechazan los tres**, cada uno con su motivo (`revocado`, `vencido`, `invalido`).
+- [ ] `/admin` permite **rotar el token de un dispositivo sin re-enrolarlo**: el token anterior se rechaza de inmediato y la acción está diferenciada en la interfaz de la revocación.
+- [ ] Una verificación exitosa de dispositivo **renueva `expira_en` a 90 días** solo cuando la vida restante es menor a 89 días, y escribe **como máximo una vez por dispositivo por día**.
 
 ### Identificación y toma de pedido
 
