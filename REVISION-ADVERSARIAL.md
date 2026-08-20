@@ -36,7 +36,7 @@ vigente** de los documentos, citándolo, y ninguno se hereda de la revisión ant
 
 **Críticos** — **5 / 8 resueltos** (#1, #2, #3, #7, #8)
 **Advertencias** — **5 / 7 resueltas** (#6, #10, #11, #13, #14)
-**Sugerencias** — 0 / 3
+**Sugerencias** — **1 / 3 resuelta** (#16, por ADR-0037)
 
 > **Los tres resueltos eran propagación, no decisión.** Ninguno requería resolver nada: alguien ya había
 > decidido y el documento no se había enterado. Se cerraron el 2026-08-18 junto con el puntero faltante de
@@ -624,7 +624,7 @@ primer implementador va a llenar con lo que le parezca.
 
 ## 🔵 Sugerencia
 
-### [ ] 16. No existe ninguna decisión de despliegue, y dos ADRs dependen de ella
+### [x] 16. No existe ninguna decisión de despliegue, y dos ADRs dependen de ella
 
 **Objetivo:** ADR-0008 / ADR-0015 — falta un ADR
 

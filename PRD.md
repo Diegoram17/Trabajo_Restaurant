@@ -468,6 +468,11 @@ ningún dato se carga desde el dashboard.
   horaria. En un salón, los turnos de mesa por noche pesan tanto como el margen del plato.
 - **Anulaciones y faltantes.** Ranking de qué se anula y qué se marca **sin insumo**, con su motivo y su
   pérdida FIFO acumulada. Abre en detalle lo que en el estado de resultados es una sola línea.
+  **Corta por plato y por mesero.** El corte por mesero no es un eje más: al desaparecer el cajero, el
+  control pasó a ser por atribución, y la anulación es la única operación que puede hacer desaparecer
+  dinero ya cobrado —se cobra en efectivo, se anula la unidad antes de cerrar la cuenta, y esa venta nunca
+  existe, así que tampoco falta en el cierre de turno—. Con el corte solo por plato, una anulación por
+  servicio se pierde entre las legítimas.
 
 *El inventario:*
 
@@ -686,6 +691,10 @@ recorra el ciclo completo, no sobre operación real.
   tarjeta o Yape contra el terminal.
 - **Riesgo — sin separación de funciones en el cobro.** Al concentrar venta y cobro en el mesero se
   pierde el control cruzado que daba un cajero aparte; la trazabilidad se apoya solo en el PIN en sesión.
+  **El control por atribución cubre la venta y ahora también la anulación**, que es la operación por la
+  que el dinero cobrado puede no llegar a ser una venta: toda pérdida por anulación registra su mesero y
+  su motivo, y el ranking corta por persona. Lo que sigue sin cubrir es el caso de abajo — el PIN
+  prestado—, porque ahí la atribución funciona y apunta a la persona equivocada.
 - **Riesgo — el PIN prestado.** El sistema garantiza que una venta se atribuye a la sesión que la hizo, no
   que esa sesión sea la persona que dice ser. Si un mesero le presta el PIN a otro, la comisión, la propina
   y el efectivo quedan mal atribuidos y el sistema no tiene cómo notarlo. Es la única grieta que queda en
@@ -693,6 +702,20 @@ recorra el ciclo completo, no sobre operación real.
 - **Riesgo — el PIN de cocina es compartido.** Al ser uno solo para todos, cualquiera que lo conozca puede
   abrir o cerrar el servicio, y cerrar cocina corta el envío de comida de todo el salón. El sistema no
   puede decir quién lo hizo. Es el precio de no hacer fichar a la cocina.
+- **Datos personales del cliente: se minimizan y no se explotan.** El comprobante es el único lugar del
+  sistema que guarda datos de un tercero — DNI, nombre y dirección en boleta; RUC, razón social y
+  dirección fiscal en factura. **Su propósito es uno solo: sostener una emisión electrónica futura**, que
+  esta versión no hace. De ahí salen tres reglas: en boleta los tres campos son **opcionales y no se piden
+  por defecto** —no recolectar es el camino normal—; **nadie lee los datos del receptor de un comprobante
+  que no cobró**; y no aparecen en ningún reporte, exportación ni evento en vivo.
+- **Riesgo — la retención de esos datos no está resuelta.** El sistema los guarda mientras exista la
+  venta, que es para siempre por ADR-0004. Para un banco de datos con DNI y domicilio de personas
+  naturales, el **contexto Perú** que este PRD ya declara trae la Ley 29733 de Protección de Datos
+  Personales, con obligaciones de finalidad, proporcionalidad y seguridad. **Queda fuera de alcance para
+  un trabajo académico sin despliegue real**, con el mismo fundamento que la emisión electrónica — pero
+  declarado, no omitido. Si este sistema saliera a producción, es lo primero a resolver junto con la
+  emisión y el segundo factor del administrador, y es el único de los tres que además obligaría a migrar
+  datos ya recolectados.
 - **Idioma de la interfaz: español.** Todo texto visible al usuario va en español, incluidos los estados
   (*advertencia*, *bien*, *agotado*, *demorada*). Los nombres `warning` / `good` que aparecen en
   `DESIGN.md` son **nombres de color del design system**, no texto de pantalla.
