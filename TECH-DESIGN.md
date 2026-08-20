@@ -435,6 +435,7 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 
 - [ ] Los importes se guardan como **`integer` en céntimos** y los porcentajes como **enteros en puntos básicos** (18% es `1800`). Ninguna columna de dinero ni de porcentaje es de punto flotante (ADR-0039).
 - [ ] Aplicar un porcentaje **no introduce un segundo redondeo**: la división por 10 000 ocurre **dentro** de la única función de redondeo, en su único punto de aplicación (ADR-0032, ADR-0039).
+- [ ] **Los importes y porcentajes se escriben siempre por parámetro enlazado, nunca como literal SQL.** El tipo de columna **no** protege: un literal `100.5` contra una columna `integer` no se rechaza, se **redondea a `101` en silencio** —y con una regla distinta a la de ADR-0032, que es medio hacia arriba—. Lo que protege es el camino de escritura: el driver con parámetros enlazados sí lo rechaza.
 - [ ] Los identificadores del dominio —tablas, columnas, campos del contrato tRPC y valores de enumeración— son **idénticos en base, backend y cliente**, y coinciden **literalmente** con los nombres de este documento (ADR-0040).
 - [ ] Las pruebas que ejercen **concurrencia, FIFO o dinero corren contra PostgreSQL real**, nunca contra un doble: un bloqueo de fila no se puede simular, y una prueba contra un mock prueba el mock (ADR-0003, ADR-0038).
 - [ ] En desarrollo el proceso **escucha solo en `127.0.0.1`**. Un bind a `0.0.0.0` es un defecto, no una comodidad: expone en claro las credenciales de las tres capas en cualquier red donde esté la máquina (ADR-0041).

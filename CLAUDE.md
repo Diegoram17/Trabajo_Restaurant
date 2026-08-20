@@ -38,7 +38,7 @@ del proyecto y está diagnosticado dos veces por revisiones independientes: *"no
 propagar lo decidido"*. Ocho de los diez hallazgos de seguridad fueron eso.
 
 **Los criterios de aceptación viven en `TECH-DESIGN.md`**, en checkboxes `- [ ]` por flujo. Son la
-especificación ejecutable del proyecto y hoy son 327.
+especificación ejecutable del proyecto y hoy son 328.
 
 **Cada ítem del backlog es un ciclo de SDD completo**, no el proyecto entero.
 
