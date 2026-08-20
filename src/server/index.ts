@@ -5,10 +5,9 @@
  *   1. Origin guard (D-A, ADR-0033 §3) — an HTTP-layer chokepoint that no
  *      procedure added later can opt out of, unlike a per-procedure tRPC
  *      middleware.
- *   2. `/trpc/*`, the API namespace — Phase 5 wires the real router here;
- *      until then every call answers JSON, never HTML, so the "the API
- *      namespace never falls through to the SPA document" invariant is
- *      provable now.
+ *   2. `/trpc/*`, the API namespace — the real tRPC router (Phase 5). An
+ *      unknown procedure answers JSON, never HTML, so "the API namespace
+ *      never falls through to the SPA document" invariant holds.
  *   3. Static SPA assets, path-containment enforced by `resolveStaticPath`
  *      (D-D).
  *   4. The SPA entry document — ONLY for requests that accept HTML (D-C): a
@@ -20,14 +19,26 @@ import { createServer as createHttpServer, type IncomingMessage, type Server, ty
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { nodeHTTPRequestHandler } from '@trpc/server/adapters/node-http';
 import { checkOrigin } from './http/origin-guard.js';
 import { resolveStaticPath } from './http/static.js';
 import { loadDotEnv, loadEnv } from './config/env.js';
+import { appRouter } from './trpc/app-router.js';
+import { createContext } from './trpc/context.js';
 
 export interface ServerConfig {
   appOrigin: string;
   buildRoot: string;
 }
+
+/**
+ * ADR-0041: bind to `127.0.0.1` only, never `0.0.0.0` — binding to all
+ * interfaces would expose every access layer's credentials in cleartext on
+ * whatever network the machine sits on. A single exported constant so
+ * `main()` and its integration test share the exact same value instead of
+ * two copies that could silently drift apart.
+ */
+export const DEFAULT_BIND_HOST = '127.0.0.1';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -48,9 +59,19 @@ function acceptsHtml(req: IncomingMessage): boolean {
   return (req.headers.accept ?? '').includes('text/html');
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(body));
+/**
+ * design: "The No Cleartext Port" Integration Test, half 2 ("Rejected, not
+ * redirected"). `X-Forwarded-Proto: http` is what the platform edge sets on
+ * a request it received in cleartext (ADR-0037 §4) — this process legitimately
+ * receives decrypted traffic *from* that edge, so this only fires when the
+ * header explicitly says the ORIGINAL request was cleartext. A local-dev
+ * request over plain loopback HTTP never carries this header at all (D3),
+ * so it is unaffected.
+ */
+function isForwardedCleartext(req: IncomingMessage): boolean {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const value = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+  return value?.split(',')[0]?.trim().toLowerCase() === 'http';
 }
 
 async function tryServeStatic(buildRoot: string, requestPath: string, res: ServerResponse): Promise<boolean> {
@@ -80,6 +101,12 @@ async function handleRequest(
   appOrigin: string,
   buildRoot: string,
 ): Promise<void> {
+  if (isForwardedCleartext(req)) {
+    res.writeHead(400);
+    res.end();
+    return;
+  }
+
   const guard = checkOrigin(req.method ?? 'GET', req.headers.origin, appOrigin);
   if (!guard.allowed) {
     res.writeHead(guard.status ?? 403);
@@ -90,7 +117,13 @@ async function handleRequest(
   const { pathname } = new URL(req.url ?? '/', 'http://internal');
 
   if (pathname === '/trpc' || pathname.startsWith('/trpc/')) {
-    sendJson(res, 404, { error: 'NOT_FOUND' });
+    await nodeHTTPRequestHandler({
+      router: appRouter,
+      createContext,
+      req,
+      res,
+      path: pathname.replace(/^\/trpc\/?/, ''),
+    });
     return;
   }
 
@@ -130,11 +163,8 @@ async function main(): Promise<void> {
   const port = Number(process.env.PORT ?? 3000);
 
   const server = createServer({ appOrigin, buildRoot });
-  // ADR-0041: bind to 127.0.0.1 only, never 0.0.0.0 — binding to all
-  // interfaces would expose every access layer's credentials in cleartext
-  // on whatever network the machine sits on.
-  server.listen(port, '127.0.0.1', () => {
-    console.log(`Listening on http://127.0.0.1:${port}`);
+  server.listen(port, DEFAULT_BIND_HOST, () => {
+    console.log(`Listening on http://${DEFAULT_BIND_HOST}:${port}`);
   });
 }
 
