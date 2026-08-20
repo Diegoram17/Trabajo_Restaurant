@@ -125,3 +125,33 @@ design system, no texto de pantalla.
 ## Git
 
 Conventional commits. **Nunca** agregar `Co-Authored-By` ni atribución de IA.
+
+## División de trabajo entre agentes (SDD multi-agente)
+
+Este proyecto se desarrolla con **dos agentes** que se pasan el trabajo. La división de fases es fija:
+
+| Fase | Agente |
+|---|---|
+| `propose` → `spec` → `design` → `tasks` | **Claude Code** |
+| `apply` | **OpenCode** |
+| `verify` | **Claude Code** |
+| `archive` | **OpenCode** |
+
+Reglas del handoff — aplicarlas siempre, sin que el usuario las repita:
+
+1. **Un solo agente opera sobre el worktree a la vez.** Nunca correr los dos en paralelo sobre el
+   mismo directorio: el handoff es secuencial, no simultáneo.
+2. **Las decisiones de preflight viajan en el `tasks.md`.** `delivery_strategy`, `chain_strategy`,
+   review budget y cualquier `size:exception` aceptado se escriben en el artefacto de tasks — el
+   agente que aplica hereda esos supuestos; si no están escritos, no existen.
+3. **Topic keys exactos**: `sdd/{cambio}/{artefacto}` (propose/spec/design/tasks/apply-progress/
+   verify-report/archive-report). Inventar otra convención rompe el handoff en silencio.
+4. **No planificar un cambio cuyas dependencias no estén aplicadas y fusionadas en `main`.** La spec
+   de un ítem se escribe contra el código que existe, no contra el que va a existir.
+5. **Push después de cada fase cerrada.** Un artefacto sincronizado en engram + `openspec/` se
+   commitea y se pushea en el mismo movimiento — así ningún agente arranca desde una base vieja.
+6. **El verify no confía en el relato del apply.** Corre los tests contra PostgreSQL real (ADR-0038)
+   y consulta la base directamente; el `apply-progress` es narrativa, no evidencia.
+7. **El checkpoint entre agentes es gate.** Antes de que el siguiente agente arranque su fase, se
+   verifica que engram y `openspec/` existan y no diverjan (engram manda). Un artefacto roto no se
+   propaga a la fase siguiente.
