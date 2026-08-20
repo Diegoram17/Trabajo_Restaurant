@@ -19,16 +19,26 @@ import { createServer as createHttpServer, type IncomingMessage, type Server, ty
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Kysely } from 'kysely';
 import { nodeHTTPRequestHandler } from '@trpc/server/adapters/node-http';
 import { checkOrigin } from './http/origin-guard.js';
 import { resolveStaticPath } from './http/static.js';
 import { loadDotEnv, loadEnv } from './config/env.js';
+import { createDb } from './db/kysely.js';
+import { createPool } from './db/pool.js';
+import type { DB } from './db/schema.js';
 import { appRouter } from './trpc/app-router.js';
-import { createContext } from './trpc/context.js';
+import { createContextFactory } from './trpc/context.js';
 
+/**
+ * `db` is required, not optional (design D2-G): from item #2 onward the
+ * process means nothing without a database, and an optional handle would
+ * let a procedure be written against one that may not be there.
+ */
 export interface ServerConfig {
   appOrigin: string;
   buildRoot: string;
+  db: Kysely<DB>;
 }
 
 /**
@@ -100,6 +110,7 @@ async function handleRequest(
   res: ServerResponse,
   appOrigin: string,
   buildRoot: string,
+  createContext: ReturnType<typeof createContextFactory>,
 ): Promise<void> {
   if (isForwardedCleartext(req)) {
     res.writeHead(400);
@@ -144,9 +155,10 @@ async function handleRequest(
  * Pure factory — no side effect until `.listen()` is called — so tests can
  * spin up a real server on an ephemeral port against a fixture `buildRoot`.
  */
-export function createServer({ appOrigin, buildRoot }: ServerConfig): Server {
+export function createServer({ appOrigin, buildRoot, db }: ServerConfig): Server {
+  const createContext = createContextFactory(db);
   return createHttpServer((req, res) => {
-    handleRequest(req, res, appOrigin, buildRoot).catch((error: unknown) => {
+    handleRequest(req, res, appOrigin, buildRoot, createContext).catch((error: unknown) => {
       console.error(error);
       if (!res.headersSent) {
         res.writeHead(500);
@@ -162,10 +174,20 @@ async function main(): Promise<void> {
   const buildRoot = fileURLToPath(new URL('../../dist/client', import.meta.url));
   const port = Number(process.env.PORT ?? 3000);
 
-  const server = createServer({ appOrigin, buildRoot });
+  const db = createDb(createPool());
+  const server = createServer({ appOrigin, buildRoot, db });
   server.listen(port, DEFAULT_BIND_HOST, () => {
     console.log(`Listening on http://${DEFAULT_BIND_HOST}:${port}`);
   });
+
+  // Teardown: release the pool's connections on process shutdown, the same
+  // way every test file destroys its own `db` in `afterAll` (D2-F).
+  const shutdown = (): void => {
+    server.close();
+    db.destroy().catch((error: unknown) => console.error(error));
+  };
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
 }
 
 const isMainModule = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];

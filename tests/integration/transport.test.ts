@@ -6,7 +6,12 @@ import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import type { Kysely } from 'kysely';
 import { createServer, DEFAULT_BIND_HOST } from '../../src/server/index';
+import { createDb } from '../../src/server/db/kysely';
+import { createPool } from '../../src/server/db/pool';
+import { loadDotEnv } from '../../src/server/config/env';
+import type { DB } from '../../src/server/db/schema';
 
 const APP_ORIGIN = 'http://127.0.0.1:3000';
 
@@ -40,11 +45,15 @@ describe('Transport (design: The "No Cleartext Port" Integration Test)', () => {
   let server: Server;
   let baseUrl: string;
   let port: number;
+  let db: Kysely<DB>;
 
   beforeAll(async () => {
+    loadDotEnv();
+    db = createDb(createPool(process.env.TEST_DATABASE_URL));
+
     const buildRoot = mkdtempSync(path.join(tmpdir(), 'app-skeleton-transport-'));
     writeFileSync(path.join(buildRoot, 'index.html'), '<!doctype html><html><body>SPA entry</body></html>');
-    server = createServer({ appOrigin: APP_ORIGIN, buildRoot });
+    server = createServer({ appOrigin: APP_ORIGIN, buildRoot, db });
     await new Promise<void>((resolve) => server.listen(0, DEFAULT_BIND_HOST, () => resolve()));
     const address = server.address() as AddressInfo;
     port = address.port;
@@ -55,6 +64,7 @@ describe('Transport (design: The "No Cleartext Port" Integration Test)', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    await db.destroy();
   });
 
   it('binds to the exact host main() uses to listen (ADR-0041): 127.0.0.1', () => {

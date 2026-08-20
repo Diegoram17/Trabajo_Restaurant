@@ -12,6 +12,7 @@
     "build": "vite build --config vite.build.config.ts && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "migrate": "tsx scripts/migrate.ts",
+    "db:types": "kysely-codegen --dialect postgres --out-file src/server/db/schema.d.ts",
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -22,6 +23,7 @@
     "@trpc/client": "^11.18.0",
     "@trpc/react-query": "^11.18.0",
     "@trpc/server": "^11.18.0",
+    "kysely": "^0.29.5",
     "pg": "^8.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -34,6 +36,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
+    "kysely-codegen": "^0.20.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
