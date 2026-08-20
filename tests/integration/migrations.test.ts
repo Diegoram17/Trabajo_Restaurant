@@ -24,8 +24,15 @@ describe('migrations: base configuration schema', () => {
     // Drop to a genuinely clean database first so this test proves
     // migration behaviour from scratch, independent of whatever
     // `tests/setup/global-setup.ts` already applied once for the whole run.
+    // The two functions 0002 creates are not owned by any table, so
+    // `DROP TABLE ... CASCADE` never reaches them: drop them explicitly
+    // (CASCADE takes their triggers with them) or a second run of this
+    // suite finds them still on disk and 0002's `CREATE FUNCTION` fails
+    // with "already exists" instead of genuinely re-applying from scratch.
     await pool.query(
-      `DROP TABLE IF EXISTS calendario_apertura_excepcion, calendario_apertura, configuracion_costos, configuracion_operativa, schema_migrations CASCADE`,
+      `DROP FUNCTION IF EXISTS vigencia_no_retroactiva() CASCADE;
+       DROP FUNCTION IF EXISTS dia_operativo(timestamptz) CASCADE;
+       DROP TABLE IF EXISTS calendario_apertura_excepcion, calendario_apertura, configuracion_costos, configuracion_operativa, schema_migrations CASCADE`,
     );
   });
 
@@ -35,7 +42,7 @@ describe('migrations: base configuration schema', () => {
 
   it('(a) applies every migration against a clean database: tables exist, 0 rows each', async () => {
     const applied = await runMigrations(pool);
-    expect(applied).toEqual(['0001_configuracion.sql']);
+    expect(applied).toEqual(['0001_configuracion.sql', '0002_dia_operativo_y_vigencia.sql']);
 
     for (const table of TABLES) {
       const { rows } = await pool.query(`SELECT count(*)::int AS count FROM ${table}`);
@@ -82,18 +89,25 @@ describe('migrations: base configuration schema', () => {
     }
   });
 
-  it('(e) has no CHECK constraint or trigger touching vigente_desde', async () => {
+  it('(e) has no CHECK constraint mentioning vigente_desde -- item #2 enforces it with a trigger instead', async () => {
     const { rows: checks } = await pool.query(
       `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
        WHERE conrelid IN ('configuracion_costos'::regclass, 'calendario_apertura'::regclass) AND contype = 'c'`,
     );
     expect(checks.some((row: { def: string }) => row.def.includes('vigente_desde'))).toBe(false);
 
+    // 0002_dia_operativo_y_vigencia.sql attaches one BEFORE trigger per
+    // table (same function, per design decision P1): a CHECK re-evaluates
+    // on every UPDATE and breaks pg_restore over historical rows, so the
+    // temporal rule is enforced here, never as a CHECK on vigente_desde.
     const { rows: triggers } = await pool.query(
-      `SELECT trigger_name FROM information_schema.triggers
+      `SELECT DISTINCT trigger_name, event_object_table FROM information_schema.triggers
        WHERE event_object_table IN ('configuracion_costos', 'calendario_apertura')`,
     );
-    expect(triggers).toHaveLength(0);
+    expect(triggers).toHaveLength(2);
+    for (const row of triggers as Array<{ trigger_name: string }>) {
+      expect(row.trigger_name).toBe('vigente_desde_no_retroactiva');
+    }
   });
 
   it('(f) rejects a null creada_por on the NOT NULL constraint', async () => {
