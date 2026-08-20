@@ -18,3 +18,24 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): EnvConfig {
   }
   return { appOrigin };
 }
+
+/**
+ * Loads `.env` into `process.env` for a standalone Node entry point
+ * (`npm run migrate`, `tests/setup/global-setup.ts`). Uses Node's native
+ * `--env-file`-equivalent API rather than a `dotenv` dependency. Safe to
+ * call more than once in the same process: `loadEnvFile` never overwrites a
+ * variable that is already set, so an explicit override (e.g. the
+ * `DATABASE_URL` global-setup injects for its `npm run migrate` subprocess)
+ * always wins over `.env`. A missing `.env` file is not an error here —
+ * `loadEnv`/`createPool` throw their own specific, actionable error when a
+ * required variable is still absent afterward.
+ */
+export function loadDotEnv(): void {
+  try {
+    process.loadEnvFile?.();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}

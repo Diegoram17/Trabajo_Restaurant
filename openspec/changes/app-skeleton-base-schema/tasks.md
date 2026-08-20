@@ -75,23 +75,36 @@ apply-progress). This batch added `vitest.unit.config.ts` (no `globalSetup`, `in
 `vite.config.ts` / plain `npm test` is unchanged and remains correct for Phase 3+ once PostgreSQL is
 reachable.
 
-## Phase 3 — Database Schema (integration, real PostgreSQL) — TDD
+## Phase 3 — Database Schema (integration, real PostgreSQL) — TDD — DONE
 
-- [ ] 3.1 [RED] `tests/integration/migrations.test.ts` against real PG: (a) clean DB → 3 tables, 0 rows each;
+- [x] 3.1 [RED] `tests/integration/migrations.test.ts` against real PG: (a) clean DB → 3 tables, 0 rows each;
   (b) re-run is a no-op, no error, no schema change; (c) a fractional value into a money column is rejected as a
   type mismatch; (d) `vigente_desde`/`creada_en` are `timestamptz`; (e) no `CHECK`/trigger on `vigente_desde`;
   (f) null `creada_por` rejected by `NOT NULL`; (g) no value-bearing column carries a `DEFAULT`
-- [ ] 3.2 [GREEN] `src/server/db/pool.ts` — `pg` `Pool` reading connection config from env
-- [ ] 3.3 [GREEN] `scripts/migrate.ts` — per-file transaction, `schema_migrations(nombre text PRIMARY KEY,
+- [x] 3.2 [GREEN] `src/server/db/pool.ts` — `pg` `Pool` reading connection config from env
+- [x] 3.3 [GREEN] `scripts/migrate.ts` — per-file transaction, `schema_migrations(nombre text PRIMARY KEY,
   aplicada_en timestamptz NOT NULL DEFAULT now())` bookkeeping
-- [ ] 3.4 [GREEN] `migrations/0001_configuracion.sql` — `configuracion_costos` (money cols `integer` céntimos per
+- [x] 3.4 [GREEN] `migrations/0001_configuracion.sql` — `configuracion_costos` (money cols `integer` céntimos per
   ADR-0039; pct cols `integer` basis points; `vigente_desde timestamptz NOT NULL` no CHECK; `creada_por integer
   NOT NULL` no FK; `UNIQUE (vigente_desde)`); `calendario_apertura` (7 boolean days, same `vigente_desde`/
   `creada_por` shape, `UNIQUE (vigente_desde)`); `calendario_apertura_excepcion` (`calendario_id`, `fecha date`,
   `abierto`, composite PK); `configuracion_operativa` (`fila_unica boolean PK DEFAULT true CHECK (fila_unica)`,
   `umbral_demora_min`, `inactividad_sesion_min`, no `vigente_desde` — unversioned). Zero rows inserted, no other
   `DEFAULT` on any parameter.
-- [ ] 3.5 Run 3.1 against 3.2–3.4, confirm GREEN
+- [x] 3.5 Run 3.1 against 3.2–3.4, confirm GREEN
+
+**Note (discovered during apply)**: nothing loaded `.env` before this batch (flagged as a known gap in Unit 2's
+apply-progress). Fixed by adding `loadDotEnv()` to `src/server/config/env.ts` — a thin wrapper around Node's
+native `process.loadEnvFile()` (stable on the Node 24 in use; guarded with `?.()` for older Node >=20 and a
+try/catch swallowing only `ENOENT`), called from `tests/setup/global-setup.ts` and from `scripts/migrate.ts`'s
+CLI entry point. Chosen over `node --env-file=.env` on the npm script command line because `npm test` invokes
+the `vitest` binary directly (not `node`), so a CLI flag has nowhere to attach without a fragile
+`node --env-file=.env node_modules/.bin/vitest` rewrite; the programmatic call works identically for
+`npm test`, `npm run test:unit` (no DB, unaffected), and `npm run migrate`, and never overwrites an
+already-set variable (global-setup's explicit `DATABASE_URL` override for its `npm run migrate` subprocess
+still wins). Verified end-to-end: `npm test` → global-setup's subprocess prints
+`Applied 1 migration(s): 0001_configuracion.sql` (first run) / `No pending migrations.` (subsequent run),
+confirming `TEST_DATABASE_URL` reached the subprocess without any hardcoded path.
 
 ## Phase 4 — HTTP Pipeline & SPA Wiring — TDD
 

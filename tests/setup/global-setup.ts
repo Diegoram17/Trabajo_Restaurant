@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import { loadDotEnv } from '../../src/server/config/env';
 
 /**
  * Vitest globalSetup (ADR-0038): migrates a scratch PostgreSQL database once,
@@ -19,6 +20,11 @@ import { execSync } from 'node:child_process';
  * exists (later work units in this same change).
  */
 export default async function setup(): Promise<void> {
+  // Nothing loads `.env` before this point (Phase 1/2 never needed a real
+  // connection string); load it here so `TEST_DATABASE_URL` is visible
+  // without hardcoding a path or adding a `dotenv` dependency.
+  loadDotEnv();
+
   const connectionString = process.env.TEST_DATABASE_URL;
   if (!connectionString) {
     throw new Error(
