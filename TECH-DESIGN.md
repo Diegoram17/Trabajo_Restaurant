@@ -737,7 +737,7 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - [ ] Lo mismo aplica al **calendario de apertura**: es el divisor de todo el estado de resultados, es irreversible hacia atrás (ADR-0022) y sin autor un error de carga es indistinguible de un cambio deliberado.
 - [ ] Un periodo ya reportado da idéntico resultado antes y después de crear una versión nueva.
 - [ ] Antes de guardar se muestra el efecto sobre el margen sumado de los platos costeables, con la diferencia.
-- [ ] Los porcentajes de comisión, merma e IGV se rechazan si son negativos o mayores que 100.
+- [ ] Los porcentajes de comisión, merma e IGV se rechazan si son negativos o mayores que **10 000 puntos básicos** (100%). Se guardan en puntos básicos, no en porcentaje (ADR-0039): el IGV es `1800`. Cargar `18` no se rechaza —es un valor válido— pero significa **0,18%**, y ese es el error que este criterio tiene que atrapar por rango cuando se pueda, y por revisión de la pantalla cuando no.
 - [ ] Los sueldos fijos de meseros no se cargan acá: salen de cada `Persona`, y el total mensual los suma.
 
 ### Gestión — personal y liquidación de propinas
