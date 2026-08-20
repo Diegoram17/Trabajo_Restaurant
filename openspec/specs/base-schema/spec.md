@@ -64,24 +64,42 @@ decimal type that permits a fractional-cent write (ADR-0011, ADR-0032).
 - WHEN the type of `vigente_desde` and `creada_en` is inspected
 - THEN both are `timestamptz`
 
-### Requirement: `vigente_desde` Ships Without a Temporal Constraint
+### Requirement: `vigente_desde` Rejects a Past Operational Day at the Database Level
 
-`vigente_desde` on `ConfiguracionCostos` and `CalendarioApertura` MUST be `timestamptz NOT NULL`
-with **no** `CHECK` or trigger comparing it to any date. The forward-only rejection against
-`dia_operativo()` (ADR-0022, ADR-0028) is out of scope here and belongs to item #2. This is safe
-only because item #1 inserts no row into either table and ships no write path that could exercise
-the missing rule; a bare `DATE(timestamp)` `CHECK` here would itself be the anti-pattern ADR-0028
-forbids, and would be wrong for five hours of every operational day.
+`vigente_desde` in `configuracion_costos` and `calendario_apertura` MUST be `timestamptz NOT NULL`
+and MUST be rejected by the database — not only by the application — when its operational day,
+`dia_operativo(vigente_desde)`, is earlier than the current operational day,
+`dia_operativo(now())` (ADR-0022, refined by ADR-0028). The comparison MUST use `dia_operativo()`
+on both sides; it MUST NOT compare `vigente_desde`'s raw calendar date nor the server's calendar
+date.
 
-#### Scenario: No constraint exists yet
-- GIVEN the migrated schema
-- WHEN the constraints on `vigente_desde` are inspected
-- THEN only `NOT NULL` is present — no date or day-boundary check exists
+#### Scenario: A `vigente_desde` on an operational day earlier than the current one is rejected
+- GIVEN a database migrated with this item applied
+- WHEN an attempt is made to insert a row into `configuracion_costos` or `calendario_apertura`
+  with `vigente_desde` whose operational day is earlier than the current operational day
+- THEN the database rejects the `INSERT`, without the application needing to validate it
+  beforehand
 
-#### Scenario: The absent rule is unreachable
-- GIVEN item #1 ships no row and no mutation touching these tables
-- WHEN the schema is reviewed for exploitable gaps
-- THEN there is no write path through which a past `vigente_desde` could be persisted
+#### Scenario: A `vigente_desde` on the current or a future operational day is accepted
+- GIVEN the same migrated database
+- WHEN an attempt is made to insert a row with `vigente_desde` whose operational day is equal to
+  or later than the current operational day
+- THEN the database accepts the `INSERT`
+
+#### Scenario: The comparison uses the operational day, not the server's calendar date
+- GIVEN a `vigente_desde` loaded in the early morning, whose operational day, under the 05:00
+  rule, still belongs to the previous operational day even though its raw calendar date already
+  matches today's
+- WHEN the rejection is evaluated
+- THEN the rejection is decided using `dia_operativo(vigente_desde)` compared against
+  `dia_operativo(now())`, not the raw calendar date of either
+
+#### Scenario: Item #1's case remains valid — zero inserted rows breaks nothing
+- GIVEN a freshly migrated database, with no rows in `configuracion_costos` or
+  `calendario_apertura`
+- WHEN this item is applied
+- THEN the constraint exists with no need for any prior data migration, because there is no
+  existing row that could violate it
 
 ### Requirement: `creada_por` Stays NOT NULL
 
