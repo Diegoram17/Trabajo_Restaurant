@@ -1,0 +1,34 @@
+change: exactness-core
+backlog_item: 2
+phase: design
+artifact_store: hybrid
+execution_mode: interactive
+delivery_strategy: ask-on-risk
+review_budget_lines: 400
+artifacts:
+  exploration: true
+  proposal: true
+  specs: true
+  design: true
+  tasks: true
+  apply_progress: false
+decisions_taken:
+  - "data-access layer for domain queries: Kysely (typed query builder, types generated from the migrated DB, no migration engine) — to be recorded as ADR-0042 plus its TECH-DESIGN.md decisions-table row"
+  - "the vigencia-resolution algorithm is written into TECH-DESIGN.md as a new 'Resolución de vigencias' criteria block inside this change, not deferred"
+  - "vigente_desde temporal rule enforced by a BEFORE INSERT OR UPDATE OF vigente_desde trigger, not a CHECK (pg_dump/pg_restore replays post-data, so historical rows never re-fail on restore or on an unrelated UPDATE of an old row)"
+  - "Kysely generated types: kysely-codegen writes a committed src/server/db/schema.d.ts; tests/integration/schema-types.test.ts regenerates to a temp file and fails the suite on mismatch — no postmigrate hook (would regenerate before the comparison and go green by construction)"
+  - "SDD artifact language policy (applies to the rest of the backlog, not just this item): proposal/spec/design/tasks under openspec/ are dev-only scaffolding and stay in English; TECH-DESIGN.md, ADRs, UI copy and domain identifiers stay in Spanish, per user decision 2026-08-20. openspec/config.yaml already said this; exactness-core's spec.md and design.md were drafted in Spanish by orchestrator error and were rewritten to English to match."
+decisions_deferred: []
+open_questions:
+  - "D2-D (redondear half-up symmetric around zero) has no ADR or acceptance criterion behind it yet — needs a TECH-DESIGN.md checkbox during sdd-apply, or it is a decided-but-not-propagated gap"
+  - "BACKLOG rows #3 and #25 both read as claiming the first production INSERT into configuracion_costos/calendario_apertura; out of scope here, flagged for whoever opens #3 or #25 first"
+  - "should UPDATE of vigente_desde be forbidden outright (ADR-0022: saving creates a new version, never edits the current one)? The trigger only enforces forward-only; full prohibition is item #25's write path, not this item's"
+  - "tests/integration/vigencia.test.ts is written across two work units (rejection/pg_constraint tests in PR 2, effective-resolution tests in PR 3) — same file touched by both PRs if chained; whoever applies PR 3 must rebase/merge onto PR 2's version, not overwrite it"
+review_workload_forecast:
+  estimated_changed_lines: "900-1000"
+  budget_risk: high
+  chained_prs_recommended: true
+  suggested_split: "PR1 rounding (pure) -> PR2 operational-day+trigger (real Postgres) -> PR3 Kysely/data-access+docs (real Postgres), PR3 depends on PR2, PR1 independent"
+  chain_strategy: stacked-to-main
+  decision: "user confirmed 3 chained PRs, stacked-to-main, 2026-08-20"
+last_updated: 2026-08-20
