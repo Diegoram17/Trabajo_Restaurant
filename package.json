@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
     "build": "vite build --config vite.build.config.ts && tsc -p tsconfig.server.json",
+    "start": "node dist/server/index.js",
     "migrate": "tsx scripts/migrate.ts",
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts",

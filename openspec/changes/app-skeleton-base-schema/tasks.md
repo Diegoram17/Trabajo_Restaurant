@@ -133,10 +133,20 @@ confirming `TEST_DATABASE_URL` reached the subprocess without any hardcoded path
 
 ## Phase 6 — Fresh-Clone Verification & Docs
 
-- [ ] 6.1 Document install/migrate/start commands (README or `package.json` scripts only) so a fresh clone with a
+- [x] 6.1 Document install/migrate/start commands (README or `package.json` scripts only) so a fresh clone with a
   reachable PostgreSQL reaches the running state with no Render/Neon account
-- [ ] 6.2 Manually run the documented sequence once end-to-end; record the result in the PR description
+- [x] 6.2 Manually run the documented sequence once end-to-end; record the result in the PR description
   (functional coverage already proven by 3.5, 4.3, 5.1)
+
+**Note (discovered during apply)**: `.env.example` could NOT be created — the tool permission layer denies
+writes to any `.env*` path outright (not just `.env` itself), independent of the `.gitignore` exemption
+(`!.env.example`) already in place for it. Not worked around. All four environment variables
+(`APP_ORIGIN`, `DATABASE_URL`, `TEST_DATABASE_URL`, `PORT`) are documented instead in `README.md` §
+"Variables de entorno", with a placeholder connection-string shape shown inline in prose (no real
+credential anywhere). `README.md` (new) and a new `start` script in `package.json`
+(`node dist/server/index.js` — the previously-undocumented "how do I run the built server" gap) were both
+required to complete 6.1; `package.json`'s `dev`/`build`/`migrate`/`test`/`test:unit`/`typecheck` scripts
+were already sufficient and untouched.
 
 ## Phase 7 — TECH-DESIGN.md Propagation (orchestrator-owned, not a sub-agent task)
 
