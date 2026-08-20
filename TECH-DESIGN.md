@@ -106,6 +106,7 @@ La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del regist
 | [ADR-0039](adrs/0039-tipos-sql-del-dinero-y-los-porcentajes.md) | El dinero es `integer` y los porcentajes son puntos básicos | Aceptado, **completa 0011 y 0032** |
 | [ADR-0040](adrs/0040-idioma-de-los-identificadores.md) | Los identificadores del dominio van en español | Aceptado, **precisa la regla de idioma**, apoya 0002 |
 | [ADR-0041](adrs/0041-transporte-en-desarrollo-local.md) | En desarrollo el proceso escucha en claro, atado a loopback | Aceptado, **precisa 0037** |
+| [ADR-0042](adrs/0042-capa-de-acceso-a-datos.md) | Kysely como capa de acceso a datos | Aceptado |
 
 ## Modelo de datos
 
@@ -821,6 +822,29 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - [ ] Un mes es un **conjunto de jornadas**, no un rango de fechas: enero termina el 1 de febrero a las 04:59, y una venta del 1 de febrero a las 00:30 cuenta en enero.
 - [ ] El eje horario de un día operativo va de **05:00 a 04:59**, no de 00:00 a 23:59: con el eje civil la franja nocturna quedaría partida entre dos días.
 - [ ] `vigente_desde` de `ConfiguracionCostos` y `CalendarioApertura` se compara contra el **día operativo en curso**, no contra la fecha civil del servidor.
+
+**Resolución de vigencias (ADR-0042)**
+
+- [ ] La versión vigente de `ConfiguracionCostos` y de `CalendarioApertura` —cada una por su lado— es la
+      de **mayor `vigente_desde` cuyo día operativo ya llegó**: `dia_operativo(vigente_desde) <=
+      dia_operativo(momento)`, nunca comparando `vigente_desde` directo contra el momento ni contra la
+      fecha civil de ninguno de los dos lados.
+- [ ] Habiendo varias versiones cuyo día operativo ya llegó, se toma la de **mayor `vigente_desde`** entre
+      esas — nunca la primera insertada ni la de fecha civil más reciente si esa no es la de mayor
+      `vigente_desde`.
+- [ ] Una versión cuyo día operativo **todavía no llegó** queda excluida aunque su fecha civil ya haya
+      empezado: es exactamente el caso que una comparación de fecha civil cruda, en vez de día operativo,
+      dejaría pasar por error.
+- [ ] Sin ninguna versión aplicable —tabla vacía, o todas con día operativo futuro— la resolución **no
+      sustituye ningún valor por defecto**: se distingue explícitamente *sin vigencia* de *vigencia con
+      un valor en cero*, para que un período sin configuración de costos se marque incompleto (línea 833)
+      en vez de reportar una utilidad con un cero adentro.
+- [ ] La resolución acepta un **momento explícito**, no solo el instante actual: es lo que permite pedir
+      "la versión que regía tal día pasado" para el estado de resultados de un período ya cerrado, sin
+      que el resultado dependa de cuándo se ejecuta la consulta.
+- [ ] `UNIQUE (vigente_desde)` garantiza que la mayor `vigente_desde` entre las versiones con día operativo
+      igual es siempre una sola fila: dos versiones no pueden empatar en el instante exacto, así que la
+      resolución nunca necesita un criterio de desempate adicional.
 
 **Estado de resultados y prorrateo (ADR-0021, ADR-0022)**
 
