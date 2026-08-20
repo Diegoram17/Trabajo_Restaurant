@@ -1,6 +1,6 @@
 change: exactness-core
 backlog_item: 2
-phase: design
+phase: verify
 artifact_store: hybrid
 execution_mode: interactive
 delivery_strategy: ask-on-risk
@@ -11,7 +11,8 @@ artifacts:
   specs: true
   design: true
   tasks: true
-  apply_progress: false
+  apply_progress: true
+  verify_report: true
 decisions_taken:
   - "data-access layer for domain queries: Kysely (typed query builder, types generated from the migrated DB, no migration engine) — to be recorded as ADR-0042 plus its TECH-DESIGN.md decisions-table row"
   - "the vigencia-resolution algorithm is written into TECH-DESIGN.md as a new 'Resolución de vigencias' criteria block inside this change, not deferred"
