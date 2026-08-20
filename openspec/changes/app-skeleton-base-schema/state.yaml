@@ -1,0 +1,17 @@
+change: app-skeleton-base-schema
+backlog_item: 1
+phase: explore
+artifact_store: hybrid
+execution_mode: interactive
+delivery_strategy: ask-on-risk
+review_budget_lines: 400
+artifacts:
+  exploration: true
+  proposal: false
+  specs: false
+  design: false
+  tasks: false
+tasks_progress:
+  completed: []
+  pending: []
+last_updated: 2026-08-19
