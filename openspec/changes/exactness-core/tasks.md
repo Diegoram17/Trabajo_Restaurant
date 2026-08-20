@@ -66,3 +66,24 @@ Chain strategy: stacked-to-main
 - [x] 4.1 `npm run test:unit` — Phase 1 green, no DB
 - [x] 4.2 `npm test` — full suite green (migrations, http-pipeline, trpc, routes, transport, dia-operativo, vigencia, schema-types)
 - [x] 4.3 `npm run typecheck` — bigint arithmetic and `Kysely<DB>` context compile clean
+
+## Phase 5: Verify remediation (data-access, 2 CRITICAL findings from sdd-verify)
+
+`sdd-verify` found the implementation itself correct (93/93 tests, direct live-PostgreSQL checks)
+but flagged 2 `data-access` spec scenarios with no covering test. This phase closes both,
+test-coverage only — no change to `redondeo.ts`, `vigencias.ts`, the migration, ADR-0042, or
+TECH-DESIGN.md.
+
+- [x] 5.1 `tests/unit/sin-sql-interpolado.test.ts`: structural audit (same style as
+  `sin-redondeo-suelto.test.ts`) proving zero occurrences of `sql.raw()`/`pool.query()`/
+  `client.query()` built with a value interpolated directly into SQL text under `src/server/**`
+  — closes "No money-writing path bypasses the bound parameter". Non-vacuous: verified by
+  temporarily planting a real violation under `src/server/domain/`, confirming the test caught
+  it, then removing it.
+- [x] 5.2 `tests/integration/row-locking.test.ts`: real-PostgreSQL integration test proving
+  Kysely's typed `.forUpdate()` reaches an actual row-level `SELECT ... FOR UPDATE` lock — a
+  second, independent connection requesting the same lock genuinely blocks (`SET LOCAL
+  lock_timeout` + PostgreSQL's `55P03`/`lock_not_available`) until the first transaction ends —
+  closes "Row locking is reachable with no escape hatch". Non-vacuous: genuine RED first
+  (`.forUpdate()` temporarily removed, test failed exactly as expected), then GREEN after
+  restoring it.
