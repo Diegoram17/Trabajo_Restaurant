@@ -418,6 +418,19 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - [ ] Tras un período de inactividad que duerma la instancia o la base, **la reconexión del stream con `Last-Event-ID` recupera los eventos perdidos** sin intervención manual y sin dejar una pantalla mostrando estado viejo (ADR-0009).
 - [ ] Una caída del enlace a internet **se comporta exactamente como el corte de red de ADR-0015**: la estación avisa y bloquea el envío, y ninguna comanda queda a medias ni se pierde en silencio.
 
+**Plataforma: origen único, rutas y migraciones**
+
+- [ ] **La SPA y la API se sirven desde un solo proceso y un solo origen.** No existe un origen alternativo para el front, ni un servidor de desarrollo aparte que lo sirva (ADR-0037).
+- [ ] La SPA expone **exactamente** `/estacion`, `/kds`, `/cocina` y `/admin` (ADR-0001). **No existe `/caja`.**
+- [ ] **El espacio de nombres de la API nunca responde el documento de la SPA.** Una llamada a `/trpc/*` que no corresponde a ningún procedimiento devuelve **JSON**, no HTML.
+- [ ] **El documento de la SPA se sirve solo a peticiones que aceptan HTML.** Un asset inexistente devuelve **404**: responder el `index.html` produce un error de MIME que esconde la causa real.
+- [ ] **Los tipos del cliente son los tipos del servidor**, sin generación de código: renombrar un campo en el backend **rompe la compilación** del frontend (ADR-0010).
+- [ ] **Las migraciones son solo hacia adelante**, versionadas y ordenadas por nombre. Volver a correrlas sobre una base ya migrada **no falla y no vuelve a aplicar nada**.
+- [ ] **Ninguna columna de parámetro de configuración tiene `DEFAULT`.** El esquema no puede completar un valor por su cuenta: un parámetro sin decidir queda visiblemente vacío en vez de plausiblemente lleno.
+- [ ] `creada_por` es **obligatoria y sin default** en `ConfiguracionCostos` y `CalendarioApertura` (SEC-08): ninguna vigencia existe sin autor.
+- [ ] Los instantes se guardan como **`timestamptz`**, nunca como fecha y hora sin zona.
+- [ ] **Un clon nuevo llega a un proceso corriendo** con los comandos documentados, sin provisionar ninguna cuenta de la plataforma.
+
 **Tipos, idioma de los identificadores y transporte en desarrollo (ADR-0038 a ADR-0041)**
 
 - [ ] Los importes se guardan como **`integer` en céntimos** y los porcentajes como **enteros en puntos básicos** (18% es `1800`). Ninguna columna de dinero ni de porcentaje es de punto flotante (ADR-0039).

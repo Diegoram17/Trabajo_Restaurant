@@ -37,7 +37,7 @@ Chain strategy: pending
 
 ## Phase 0 — Decision Gate (blocking, no implementation)
 
-- [ ] 0.1 **STOP for user decision** — data-access layer convention for future domain queries: raw `pg` query
+- [ ] 0.1 **DEFERRED to backlog item #2 by user decision** (recorded on its BACKLOG row as an entry gate) — originally: STOP for user decision — data-access layer convention for future domain queries: raw `pg` query
   strings, a query builder (e.g. Kysely), or an ORM (e.g. Drizzle/Prisma). Item #7's `SELECT … FOR UPDATE`
   (ADR-0003/0007) makes this load-bearing. This task decides nothing.
   Note: item #1 writes no domain query. `scripts/migrate.ts` and `src/server/db/pool.ts` (Phase 3) inevitably
@@ -108,27 +108,27 @@ confirming `TEST_DATABASE_URL` reached the subprocess without any hardcoded path
 
 ## Phase 4 — HTTP Pipeline & SPA Wiring — TDD
 
-- [ ] 4.1 [RED] `tests/integration/http-pipeline.test.ts` — real server, ephemeral port: unknown path with
+- [x] 4.1 [RED] `tests/integration/http-pipeline.test.ts` — real server, ephemeral port: unknown path with
   `Accept: text/html` → `index.html`; `/trpc/nope` → JSON not HTML; missing hashed asset → 404 not HTML
-- [ ] 4.2 [GREEN] `src/server/index.ts` — pipeline order: origin guard → `/trpc/*` → static → `Accept: text/html`
+- [x] 4.2 [GREEN] `src/server/index.ts` — pipeline order: origin guard → `/trpc/*` → static → `Accept: text/html`
   fallback → 404
-- [ ] 4.3 [RED] `tests/integration/routes.test.ts` — `/estacion`, `/kds`, `/cocina`, `/admin` each return the SPA
+- [x] 4.3 [RED] `tests/integration/routes.test.ts` — `/estacion`, `/kds`, `/cocina`, `/admin` each return the SPA
   entry document, 200
-- [ ] 4.4 [GREEN] (P) `src/client/main.tsx`, `src/client/routes.tsx` (React Router, exactly 4 routes),
+- [x] 4.4 [GREEN] (P) `src/client/main.tsx`, `src/client/routes.tsx` (React Router, exactly 4 routes),
   `src/client/pages/{Estacion,Kds,Cocina,Admin}.tsx` placeholders
 
 ## Phase 5 — tRPC & Transport Proofs — TDD
 
-- [ ] 5.1 [RED] `tests/integration/trpc.test.ts` — SPA-side typed client calls one real procedure, response type
+- [x] 5.1 [RED] `tests/integration/trpc.test.ts` — SPA-side typed client calls one real procedure, response type
   is server-inferred, no manually duplicated types
-- [ ] 5.2 [GREEN] `src/server/trpc/{context,router,app-router}.ts` (one real query procedure) + `src/client/trpc.ts`
-- [ ] 5.3 [RED] same file — throwaway mutation: matching `Origin` accepted; foreign `Origin` rejected before any
+- [x] 5.2 [GREEN] `src/server/trpc/{context,router,app-router}.ts` (one real query procedure) + `src/client/trpc.ts`
+- [x] 5.3 [RED] same file — throwaway mutation: matching `Origin` accepted; foreign `Origin` rejected before any
   side effect; absent `Origin` on a state-changing request rejected
-- [ ] 5.4 [GREEN] add the throwaway mutation to `app-router.ts`, guarded by 2.4's origin-guard at the HTTP layer
-- [ ] 5.5 [RED] `tests/integration/transport.test.ts` — server binds `127.0.0.1` only: `ECONNREFUSED` connecting
+- [x] 5.4 [GREEN] add the throwaway mutation to `app-router.ts`, guarded by 2.4's origin-guard at the HTTP layer
+- [x] 5.5 [RED] `tests/integration/transport.test.ts` — server binds `127.0.0.1` only: `ECONNREFUSED` connecting
   a non-loopback local IPv4 on the same port
-- [ ] 5.6 [RED] same file — request carrying `X-Forwarded-Proto: http` → 4xx, never 3xx, no `Location` header
-- [ ] 5.7 [GREEN] `src/server/index.ts` / `env.ts` — bind listener to `127.0.0.1` (ADR-0041); reject on
+- [x] 5.6 [RED] same file — request carrying `X-Forwarded-Proto: http` → 4xx, never 3xx, no `Location` header
+- [x] 5.7 [GREEN] `src/server/index.ts` / `env.ts` — bind listener to `127.0.0.1` (ADR-0041); reject on
   forwarded-proto mismatch without redirecting
 
 ## Phase 6 — Fresh-Clone Verification & Docs
@@ -150,6 +150,6 @@ were already sufficient and untouched.
 
 ## Phase 7 — TECH-DESIGN.md Propagation (orchestrator-owned, not a sub-agent task)
 
-- [ ] 7.1 Orchestrator writes every acceptance criterion from `sdd/app-skeleton-base-schema/spec` (both
+- [x] 7.1 Orchestrator writes every acceptance criterion from `sdd/app-skeleton-base-schema/spec` (both
   `app-skeleton` and `base-schema` domains) into `TECH-DESIGN.md` as Spanish `- [ ]` checkboxes before archive.
   Sub-agents do not have write access to `TECH-DESIGN.md`; a change that ships without this is not done.

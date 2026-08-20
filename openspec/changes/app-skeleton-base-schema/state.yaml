@@ -1,6 +1,6 @@
 change: app-skeleton-base-schema
 backlog_item: 1
-phase: tasks
+phase: apply
 artifact_store: hybrid
 execution_mode: interactive
 delivery_strategy: ask-on-risk
@@ -11,20 +11,37 @@ artifacts:
   specs: true
   design: true
   tasks: true
+  apply_progress: true
 decisions_resolved:
+  - ADR-0037 hosted on a single origin, platform-terminated TLS, no local CA
   - ADR-0038 test runner is Vitest, integration tests against real PostgreSQL
   - ADR-0039 money is integer cents, percentages are integer basis points
   - ADR-0040 domain identifiers stay in Spanish across DB, backend and client
   - ADR-0041 development listens in cleartext on loopback only
-decisions_open:
-  - data-access layer for domain queries (raw pg, query builder or ORM) - phase 0 gate
-  - delivery split, forecast is 1150-1350 lines against a 400-line budget
-review_workload_forecast:
-  estimated_changed_lines: 1150-1350
-  budget_risk: high
-  chained_prs_recommended: true
-  decision_needed_before_apply: true
+decisions_deferred:
+  - data-access layer for domain queries, moved to backlog item #2 and recorded on its row
+delivery:
+  shape: six work-unit commits on branch feat/item-1-app-skeleton
+  commits:
+    - 80eef48 build tooling scaffold
+    - 91edb44 unit layer
+    - c5508bd configuration schema and migrations
+    - c09fb04 single-origin HTTP pipeline and four routes
+    - c0bf8c4 tRPC wiring and transport proofs
+    - 7ad4d37 README and fresh-run verification
+evidence:
+  full_tier: 48 tests passing against real PostgreSQL 17.11
+  unit_tier: 25 tests passing with no database
+  typecheck: both bundler and NodeNext targets exit 0
+  live_server: binds 127.0.0.1 only, four routes 200 html, missing asset 404, foreign Origin POST 403
+propagation:
+  tech_design_criteria: 327 total, 10 added by this change plus 5 from ADR-0038 to ADR-0041
+  inherited_obligations:
+    - "row #2: vigente_desde forward-only rule, plus the data-access layer decision"
+    - "row #3: creada_por foreign key and cookie attribute verification"
+    - "row #5: cookie attribute verification"
+    - "row #25: percentage range rejection in basis points"
 tasks_progress:
-  completed: []
-  pending: []
-last_updated: 2026-08-19
+  completed: 32
+  pending: 1
+last_updated: 2026-08-20
