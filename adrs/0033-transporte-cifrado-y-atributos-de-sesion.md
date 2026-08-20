@@ -9,6 +9,16 @@ tres capas y no decidió por dónde viajan. Cierra además la mitad de seguridad
 `REVISION-ADVERSARIAL.md` —*"no existe ninguna decisión de despliegue"*—, que sigue abierto en lo que
 respecta a empaquetado y entrega.
 
+**La sección 1 —*TLS con CA interna*— queda reemplazada por ADR-0037.** El sistema corre alojado y la
+plataforma termina el TLS con un certificado público: ya no hay CA propia del local, ni clave privada
+que custodiar, ni certificado raíz que instalar en las cinco pantallas. Con eso desaparecen los tres
+costos que este ADR declaró y no resolvió —custodia, renovación sin alarma y enrolamiento más pesado—,
+y el hallazgo **#16** queda cerrado del todo.
+
+Las secciones **2** —los atributos de las dos cookies— y **3** —la validación de `Origin`— siguen
+vigentes **sin ningún cambio**. ADR-0037 fija el origen único, que es la condición bajo la cual esas dos
+defensas funcionan tal como están escritas acá.
+
 ## Contexto
 
 ADR-0031 tomó una decisión explícita sobre en qué **no** confiar, y la argumentó:

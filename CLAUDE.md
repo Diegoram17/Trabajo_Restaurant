@@ -17,7 +17,7 @@ Todo vive en la **raíz**. No mover a `docs/`.
 | `adrs/` | Una decisión por archivo, formato MADR | **Manda** en el porqué |
 | `BACKLOG.md` | 30 ítems ordenados por dependencia, uno por ciclo SDD | Plan de trabajo |
 | `SECURITY-REPORT.md` | Pase de seguridad, 10/10 cerrados | Histórico con estado |
-| `REVISION-ADVERSARIAL.md` | Revisión adversarial previa, 7 hallazgos abiertos | Histórico con estado |
+| `REVISION-ADVERSARIAL.md` | Revisión adversarial previa, 6 hallazgos abiertos | Histórico con estado |
 | `CHANGELOG.md` | Siete versiones del producto y qué reemplazó cada una | Histórico |
 | `DESIGN.md` | Design system y decisiones de interfaz | Referencia visual |
 | `prototypes/` | HTML de referencia, **no autoridad** | Ceden ante los de arriba |
@@ -38,7 +38,7 @@ del proyecto y está diagnosticado dos veces por revisiones independientes: *"no
 propagar lo decidido"*. Ocho de los diez hallazgos de seguridad fueron eso.
 
 **Los criterios de aceptación viven en `TECH-DESIGN.md`**, en checkboxes `- [ ]` por flujo. Son la
-especificación ejecutable del proyecto y hoy son 307.
+especificación ejecutable del proyecto y hoy son 312.
 
 **Cada ítem del backlog es un ciclo de SDD completo**, no el proyecto entero.
 
@@ -83,7 +83,12 @@ Romper cualquiera de estos falla en silencio con un número plausible que no rec
 ## Stack
 
 TypeScript de punta a punta. Backend Node + tRPC, SPA React, PostgreSQL. SSE para empuje del servidor
-(HTTP/2 es requisito, no optimización). TLS con CA propia del local; el backend no escucha en claro.
+(HTTP/2 es requisito, no optimización).
+
+**Corre alojado y con un solo origen** (ADR-0037): el backend en Render sirve también la SPA, y la base
+es Neon. El TLS lo termina la plataforma — **no hay CA propia del local** y ninguna pantalla instala un
+certificado raíz. El backend no expone ningún puerto en claro. El origen único no es preferencia de
+despliegue: es la condición bajo la cual las cookies `SameSite` de ADR-0033 siguen funcionando.
 
 Rutas: `/estacion`, `/kds`, `/cocina`, `/admin`. **No existe `/caja`** — el mesero cobra desde su
 estación. **No existe el rol `cajero`.**

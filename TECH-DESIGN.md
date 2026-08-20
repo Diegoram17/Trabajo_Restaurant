@@ -97,10 +97,11 @@ La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del regist
 | [ADR-0030](adrs/0030-clave-de-ordenamiento-fifo.md) | El consumo FIFO se ordena por número de lote, no por fecha de compra | Aceptado |
 | [ADR-0031](adrs/0031-politica-de-acceso.md) | Tres capas de acceso: dispositivo, persona y llave de servicio | Aceptado, **completado por 0033, 0034, 0035 y 0036** |
 | [ADR-0032](adrs/0032-regla-de-redondeo.md) | La regla de redondeo y su punto de aplicación | Aceptado, **completa 0011** |
-| [ADR-0033](adrs/0033-transporte-cifrado-y-atributos-de-sesion.md) | TLS con CA propia del local, y los atributos de sesión que habilita | Aceptado, **completa 0031** |
+| [ADR-0033](adrs/0033-transporte-cifrado-y-atributos-de-sesion.md) | TLS con CA propia del local, y los atributos de sesión que habilita | Aceptado, **completa 0031**, sección 1 **reemplazada por 0037** |
 | [ADR-0034](adrs/0034-el-dispositivo-es-precondicion-del-pin.md) | El dispositivo es precondición del PIN, no de la contraseña | Aceptado, **completa 0031** |
 | [ADR-0035](adrs/0035-el-evento-es-una-senal-y-el-stream-se-filtra-por-rol.md) | El evento es una señal de invalidación, y el stream se filtra por rol | Aceptado, **completa 0031, propaga 0013, precisa 0009** |
 | [ADR-0036](adrs/0036-el-hash-de-cada-secreto-lo-decide-su-entropia.md) | El hash de cada secreto lo decide su entropía, y el token tiene ciclo de vida | Aceptado, **completa 0031** |
+| [ADR-0037](adrs/0037-alojamiento-y-origen-unico.md) | El sistema corre alojado y con un solo origen | Aceptado, **reemplaza la sección 1 de 0033**, da piso a 0008, precisa 0015 |
 
 ## Modelo de datos
 
@@ -398,12 +399,20 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 **Transporte cifrado y atributos de sesión (ADR-0033)**
 
 - [ ] **Todo el tráfico va sobre TLS**, incluido el canal SSE. El backend **no escucha en claro**: una petición HTTP no se redirige, se rechaza — una redirección deja la primera petición viajando con su cookie adentro.
-- [ ] El certificado lo emite una **CA propia del local**, y su certificado raíz se instala en las **5 pantallas** como parte del mismo procedimiento de enrolamiento del dispositivo.
+- [ ] El certificado **lo emite la plataforma de alojamiento** sobre su propio dominio (ADR-0037). **No existe CA propia del local**, y ninguna pantalla necesita tener instalado un certificado raíz para operar.
 - [ ] La cookie de dispositivo lleva `Secure`, `HttpOnly` y **`SameSite=Lax`** — `Lax` y no `Strict` porque tiene que sobrevivir a la navegación con que arranca cada pantalla al encenderse.
 - [ ] La cookie de sesión de `/admin` lleva `Secure`, `HttpOnly` y **`SameSite=Strict`**: no existe navegación entrante legítima desde otro sitio hacia el panel.
 - [ ] **Toda mutación tRPC valida la cabecera `Origin`** y rechaza la que no coincida con el origen del sistema. Es red de seguridad, no control principal: `SameSite` ya cubre el caso, pero depende de un default del navegador que el sistema no controla.
 - [ ] Una captura de tráfico durante un login, un cobro y una suscripción al stream **no contiene** el PIN, el token de dispositivo ni la cookie de sesión en claro.
 - [ ] Una escritura de `ConfiguracionCostos` o `CalendarioApertura` emitida desde otro origen **se rechaza**. Es el vector con daño permanente: ADR-0022 prohíbe corregir hacia atrás, así que una vigencia falsificada no se puede deshacer.
+
+**Alojamiento y origen único (ADR-0037)**
+
+- [ ] **La SPA y la API tRPC se sirven desde el mismo origen.** No existe un origen separado para el front: ninguna petición del cliente al backend es *cross-site*, que es la condición bajo la cual `SameSite=Lax` y `SameSite=Strict` (ADR-0033) funcionan sin excepción.
+- [ ] **Ningún paso del enrolamiento instala un certificado.** Enrolar un dispositivo es recibir su token una sola vez (ADR-0031) y nada más: no hay CA propia ni certificado raíz que distribuir a las 5 pantallas.
+- [ ] El proceso del backend **no expone ningún puerto en claro a ninguna red**. Recibe tráfico ya descifrado desde el borde de la plataforma, y el origen público **rechaza** —no redirige— toda petición sin cifrar.
+- [ ] Tras un período de inactividad que duerma la instancia o la base, **la reconexión del stream con `Last-Event-ID` recupera los eventos perdidos** sin intervención manual y sin dejar una pantalla mostrando estado viejo (ADR-0009).
+- [ ] Una caída del enlace a internet **se comporta exactamente como el corte de red de ADR-0015**: la estación avisa y bloquea el envío, y ninguna comanda queda a medias ni se pierde en silencio.
 
 **Ancla del límite de intentos y qué exige dispositivo (ADR-0034)**
 
