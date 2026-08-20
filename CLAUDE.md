@@ -21,6 +21,7 @@ Todo vive en la **raíz**. No mover a `docs/`.
 | `CHANGELOG.md` | Siete versiones del producto y qué reemplazó cada una | Histórico |
 | `DESIGN.md` | Design system y decisiones de interfaz | Referencia visual |
 | `prototypes/` | HTML de referencia, **no autoridad** | Ceden ante los de arriba |
+| `openspec/` | Espejo en git de los artefactos SDD; el estado vivo está en engram | Andamio, cede ante los de arriba |
 
 **Antes de responder sobre estructura o arquitectura, leé `TECH-DESIGN.md` — no adivines desde el
 `PRD.md`.** Y no grepees `prototypes/`: el código real va comprimido en un bundle y no aparece.
@@ -41,11 +42,17 @@ especificación ejecutable del proyecto y hoy son 307.
 
 **Cada ítem del backlog es un ciclo de SDD completo**, no el proyecto entero.
 
-**Los artefactos de SDD viven solo en memoria persistente (engram), no en el repo.** No crear
-`openspec/` ni usar el despachador nativo de SDD — lee únicamente archivos y no ve lo que está en
-memoria. El estado se resuelve por `topic_key`. Se decidió así porque hybrid dejaba la misma spec en
-dos lugares, que es el patrón que ADR-0013 ya rechazó. Las specs son andamio; el registro de
-decisiones que se entrega es `PRD.md`, `TECH-DESIGN.md` y `adrs/`, y esos sí están en git.
+**Los artefactos de SDD viven en dos lugares, y en este orden: engram manda, `openspec/` refleja.**
+El estado vivo se resuelve por `topic_key` (`sdd/{cambio}/{artefacto}`); `openspec/` es su espejo
+versionado, para que el cambio se lea en un diff y el despachador nativo —que solo lee archivos y no
+ve lo que está en memoria— pueda verlo. **Una fase no está cerrada hasta que existen los dos.** Si
+divergen, gana engram y el espejo se regenera desde ahí, nunca al revés.
+
+Antes era solo engram, justamente para no tener la misma spec en dos lados —el patrón que ADR-0013
+rechaza—. El modo híbrido acepta ese costo a cambio del despachador y del diff, y lo acota con la
+regla de precedencia de arriba. Lo que no cambia: las specs son andamio; el registro de decisiones
+que se entrega es `PRD.md`, `TECH-DESIGN.md` y `adrs/`, y fusionar un delta **nunca** reemplaza
+actualizarlos.
 
 ## Invariantes que no se negocian
 

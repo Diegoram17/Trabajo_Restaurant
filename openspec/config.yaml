@@ -1,0 +1,76 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Project: Trabajo_Restaurant — restaurant salon POS. Flow: order -> kitchen display (KDS) ->
+  payment -> FIFO inventory -> profitability dashboard. The central deliverable is the DATA
+  (margin per dish must fall out of the operation itself), not the operation alone.
+  Peru context: IGV, boleta/factura, PEN. Academic project, no real deployment.
+  Greenfield: no code exists yet. The stack below is decided via ADRs but not installed.
+
+  Persistence mode: hybrid. Engram holds the live SDD state under topic keys
+  `sdd/{change-name}/{artifact-type}`; this directory is its git-visible mirror. On divergence,
+  Engram wins for in-flight change state and these files are re-synced from it. Neither store is
+  project authority: PRD.md, TECH-DESIGN.md and adrs/ at the repo root are, and they stay in git.
+
+  Stack: TypeScript end to end (ADR-0002). Backend Node + tRPC (ADR-0010). React SPA with exactly
+  four routes — /estacion, /kds, /cocina, /admin (ADR-0001); there is no /caja route and no cajero
+  role. PostgreSQL (ADR-0003). Server push via SSE with Last-Event-ID resume (ADR-0008, ADR-0009);
+  HTTP/2 is a requirement, not an optimization. TLS with a local internal CA; the backend never
+  listens in cleartext (ADR-0033).
+
+  Architecture: the server is the only source of truth. No money rule lives on the client — the
+  rejection always happens server-side, not only in the UI.
+
+  Non-negotiable invariants (breaking one fails silently with a plausible number that does not
+  reconcile): money as integers in minor units, never floating point, with a single round-half-up
+  function and a single application point (ADR-0011, ADR-0032); the operational day starts at
+  05:00 America/Lima, computed by dia_operativo() and never persisted — no bare DATE(timestamp) is
+  ever valid (ADR-0028); FIFO orders by numero_lote, never by date (ADR-0030); no persisted
+  per-unit ingredient cost, it is derived from the lot (ADR-0032); no stock field — stock is the
+  sum of an append-only ledger with no reversals (ADR-0005); a closed sale is an immutable
+  snapshot (ADR-0004); vigente_desde only moves forward (ADR-0022); authorization resolves against
+  Cuenta.mesero, never against the table (ADR-0017); open accounts are filtered with the whitelist
+  estado IN (abierta, en_cobro), never <> cerrada (ADR-0027); EventoOperacion carries no payload,
+  it is an invalidation signal filtered by device role (ADR-0035).
+
+  Dominant failure mode, diagnosed twice by independent reviews: "it is not deciding badly, it is
+  not propagating what was decided." A decision without its row in the TECH-DESIGN.md table, its
+  acceptance criteria and its data-model adjustment is not taken.
+
+  Testing: no test runner installed. Runner choice is deferred to BACKLOG.md item #1; do not
+  fabricate a test_command before that item lands.
+
+  Language: documentation, acceptance criteria and UI copy in Spanish; code, identifiers,
+  comments, commit messages and SDD artifacts in English.
+
+rules:
+  proposal:
+    - Scope each proposal to exactly one BACKLOG.md item, in dependency order — one SDD cycle per item
+    - Include a rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Propagate every new or changed acceptance criterion to the TECH-DESIGN.md checkboxes, which are the source of truth
+    - Money fields MUST use integer minor units, never floating point (ADR-0011, ADR-0032)
+  design:
+    - Include sequence diagrams for complex flows
+    - A new or changed architecture decision gets a NEW ADR; ADRs are append-only and are never rewritten
+    - Every new or changed decision MUST get a row in the TECH-DESIGN.md architecture decisions table
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Respect the invariants listed in context
+      - Code, identifiers and comments in English; UI copy and documentation in Spanish
+      - Conventional commits; never add Co-Authored-By or AI attribution
+    tdd: true
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+    - Merging a delta never relieves the obligation to update TECH-DESIGN.md and adrs/ at the repo root
