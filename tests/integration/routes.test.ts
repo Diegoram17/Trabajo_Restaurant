@@ -3,7 +3,12 @@ import { build } from 'vite';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import type { Kysely } from 'kysely';
 import { createServer } from '../../src/server/index';
+import { createDb } from '../../src/server/db/kysely';
+import { createPool } from '../../src/server/db/pool';
+import { loadDotEnv } from '../../src/server/config/env';
+import type { DB } from '../../src/server/db/schema';
 
 const ROUTES = ['/estacion', '/kds', '/cocina', '/admin'] as const;
 
@@ -16,12 +21,16 @@ const ROUTES = ['/estacion', '/kds', '/cocina', '/admin'] as const;
 describe('SPA route shells (ADR-0001: exactly /estacion, /kds, /cocina, /admin)', () => {
   let server: Server;
   let baseUrl: string;
+  let db: Kysely<DB>;
 
   beforeAll(async () => {
     await build({ configFile: 'vite.build.config.ts', logLevel: 'warn' });
 
+    loadDotEnv();
+    db = createDb(createPool(process.env.TEST_DATABASE_URL));
+
     const buildRoot = fileURLToPath(new URL('../../dist/client', import.meta.url));
-    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot });
+    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot, db });
     await new Promise<void>((resolve) => {
       server.listen(0, '127.0.0.1', () => resolve());
     });
@@ -36,6 +45,7 @@ describe('SPA route shells (ADR-0001: exactly /estacion, /kds, /cocina, /admin)'
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    await db.destroy();
   });
 
   it.each(ROUTES)('%s returns the SPA entry document, 200', async (route) => {

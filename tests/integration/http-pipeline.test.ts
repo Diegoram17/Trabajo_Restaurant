@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import type { Kysely } from 'kysely';
 import { createServer } from '../../src/server/index';
+import { createDb } from '../../src/server/db/kysely';
+import { createPool } from '../../src/server/db/pool';
+import { loadDotEnv } from '../../src/server/config/env';
+import type { DB } from '../../src/server/db/schema';
 
 // Real server on an ephemeral port, real socket, against a synthetic fixture
 // buildRoot (no real SPA build needed to prove the pipeline's ORDER —
@@ -16,14 +21,18 @@ import { createServer } from '../../src/server/index';
 describe('HTTP pipeline (design: Runtime Shape)', () => {
   let server: Server;
   let baseUrl: string;
+  let db: Kysely<DB>;
 
   beforeAll(async () => {
+    loadDotEnv();
+    db = createDb(createPool(process.env.TEST_DATABASE_URL));
+
     const buildRoot = mkdtempSync(path.join(tmpdir(), 'app-skeleton-pipeline-'));
     writeFileSync(path.join(buildRoot, 'index.html'), '<!doctype html><html><body>SPA entry</body></html>');
     mkdirSync(path.join(buildRoot, 'assets'));
     writeFileSync(path.join(buildRoot, 'assets', 'app.abc123.js'), 'export {};');
 
-    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot });
+    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot, db });
     await new Promise<void>((resolve) => {
       server.listen(0, '127.0.0.1', () => resolve());
     });
@@ -35,6 +44,7 @@ describe('HTTP pipeline (design: Runtime Shape)', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    await db.destroy();
   });
 
   it('an unknown path with Accept: text/html falls back to the SPA entry document', async () => {

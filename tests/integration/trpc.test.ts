@@ -4,8 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import type { Kysely } from 'kysely';
 import { createTRPCClient, httpBatchLink } from '@trpc/client';
 import { createServer } from '../../src/server/index';
+import { createDb } from '../../src/server/db/kysely';
+import { createPool } from '../../src/server/db/pool';
+import { loadDotEnv } from '../../src/server/config/env';
+import type { DB } from '../../src/server/db/schema';
 import type { AppRouter } from '../../src/server/trpc/app-router';
 
 const APP_ORIGIN = 'http://127.0.0.1:3000';
@@ -17,11 +22,15 @@ const APP_ORIGIN = 'http://127.0.0.1:3000';
 describe('tRPC transport (spec: End-to-End Typed tRPC)', () => {
   let server: Server;
   let baseUrl: string;
+  let db: Kysely<DB>;
 
   beforeAll(async () => {
+    loadDotEnv();
+    db = createDb(createPool(process.env.TEST_DATABASE_URL));
+
     const buildRoot = mkdtempSync(path.join(tmpdir(), 'app-skeleton-trpc-'));
     writeFileSync(path.join(buildRoot, 'index.html'), '<!doctype html><html><body>SPA entry</body></html>');
-    server = createServer({ appOrigin: APP_ORIGIN, buildRoot });
+    server = createServer({ appOrigin: APP_ORIGIN, buildRoot, db });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
     const { port } = server.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}`;
@@ -31,6 +40,7 @@ describe('tRPC transport (spec: End-to-End Typed tRPC)', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+    await db.destroy();
   });
 
   it('the SPA-side typed client calls a real procedure and its response type is server-inferred', async () => {
