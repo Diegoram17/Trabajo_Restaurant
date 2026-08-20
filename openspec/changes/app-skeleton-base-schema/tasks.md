@@ -46,12 +46,12 @@ Chain strategy: pending
 
 ## Phase 1 — Repository & Build Tooling (parallel-safe, scaffolding only — no tests)
 
-- [ ] 1.1 (P) `package.json`: deps (typescript, vite, react, react-dom, react-router, @trpc/server, @trpc/client,
+- [x] 1.1 (P) `package.json`: deps (typescript, vite, react, react-dom, react-router, @trpc/server, @trpc/client,
   @trpc/react-query, @tanstack/react-query, zod, pg, vitest); scripts `build`, `dev`, `migrate`, `test` → `vitest run`
-- [ ] 1.2 (P) `tsconfig.json` (+ server/client split if needed), strict mode on
-- [ ] 1.3 (P) `.gitignore`: `node_modules`, `dist`, `build`, `.env`
-- [ ] 1.4 `vite.config.ts`: SPA build root + `test` block (`pool: 'forks'`, `globalSetup: tests/setup/global-setup.ts`)
-- [ ] 1.5 `tests/setup/global-setup.ts`: migrates a scratch PostgreSQL DB before the suite runs (ADR-0038)
+- [x] 1.2 (P) `tsconfig.json` (+ server/client split if needed), strict mode on
+- [x] 1.3 (P) `.gitignore`: `node_modules`, `dist`, `build`, `.env`
+- [x] 1.4 `vite.config.ts`: SPA build root + `test` block (`pool: 'forks'`, `globalSetup: tests/setup/global-setup.ts`)
+- [x] 1.5 `tests/setup/global-setup.ts`: migrates a scratch PostgreSQL DB before the suite runs (ADR-0038)
 
 ## Phase 2 — Unit Layer (no DB, no socket) — TDD
 
