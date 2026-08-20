@@ -47,22 +47,22 @@ Chain strategy: stacked-to-main
 
 ## Phase 3: Data access layer (PR 3, consumes Phase 2)
 
-- [ ] 3.1 `package.json`: add `kysely` dep, `kysely-codegen` devDep, `db:types` script (`kysely-codegen --dialect postgres --out-file src/server/db/schema.d.ts`, no `--camel-case`)
-- [ ] 3.2 Generate `src/server/db/schema.d.ts` via `npm run db:types` against migrated `TEST_DATABASE_URL`; commit it
-- [ ] 3.3 Create `src/server/db/kysely.ts`: `createDb(pool)` wraps the existing `pg.Pool` in `Kysely<DB>`/`PostgresDialect` (D2-F)
-- [ ] 3.4 RED `tests/integration/vigencia.test.ts`: effective-row resolution — greatest `vigente_desde` ≤ today; empty table ⇒ `sin_vigencia`; a past `momento` returns the row that governed then
-- [ ] 3.5 GREEN `src/server/domain/vigencias.ts`: `Vigencia<T>` union (D2-H), `configuracionCostosVigente`/`calendarioAperturaVigente` via `sql\`dia_operativo(vigente_desde) <= dia_operativo(${instante})\``, bound param, default `now()`
-- [ ] 3.6 Modify `src/server/trpc/context.ts`: `Context.db` required, `createContextFactory(db)` (D2-G)
-- [ ] 3.7 Modify `src/server/index.ts`: `ServerConfig.db`, wire `createContextFactory(db)`, teardown `db.destroy()`
-- [ ] 3.8 Modify `tests/integration/{http-pipeline,trpc,routes,transport}.test.ts`: pass `db` into `createServer` (D2-G)
-- [ ] 3.9 RED `tests/integration/schema-types.test.ts`: regenerate schema to a temp file from `TEST_DATABASE_URL`, normalize CRLF→LF, compare vs committed `schema.d.ts`, fail naming `npm run db:types`
-- [ ] 3.10 GREEN: confirm 3.9 passes against 3.2's committed file
-- [ ] 3.11 Create `adrs/0042-capa-de-acceso-a-datos.md`: append-only ADR for Kysely + trigger-over-CHECK (P1) + codegen gate (P2)
-- [ ] 3.12 `TECH-DESIGN.md` decisions table (~line 99): add ADR-0042 row
-- [ ] 3.13 `TECH-DESIGN.md`: new "Resolución de vigencias" `- [ ]` criteria block — greatest-`vigente_desde`-≤-today algorithm, `sin_vigencia`/union case (Spanish)
+- [x] 3.1 `package.json`: add `kysely` dep, `kysely-codegen` devDep, `db:types` script (`kysely-codegen --dialect postgres --out-file src/server/db/schema.d.ts`, no `--camel-case`)
+- [x] 3.2 Generate `src/server/db/schema.d.ts` via `npm run db:types` against migrated `TEST_DATABASE_URL`; commit it
+- [x] 3.3 Create `src/server/db/kysely.ts`: `createDb(pool)` wraps the existing `pg.Pool` in `Kysely<DB>`/`PostgresDialect` (D2-F)
+- [x] 3.4 RED `tests/integration/vigencia.test.ts`: effective-row resolution — greatest `vigente_desde` ≤ today; empty table ⇒ `sin_vigencia`; a past `momento` returns the row that governed then
+- [x] 3.5 GREEN `src/server/domain/vigencias.ts`: `Vigencia<T>` union (D2-H), `configuracionCostosVigente`/`calendarioAperturaVigente` via `sql\`dia_operativo(vigente_desde) <= dia_operativo(${instante})\``, bound param, default `now()`
+- [x] 3.6 Modify `src/server/trpc/context.ts`: `Context.db` required, `createContextFactory(db)` (D2-G)
+- [x] 3.7 Modify `src/server/index.ts`: `ServerConfig.db`, wire `createContextFactory(db)`, teardown `db.destroy()`
+- [x] 3.8 Modify `tests/integration/{http-pipeline,trpc,routes,transport}.test.ts`: pass `db` into `createServer` (D2-G)
+- [x] 3.9 RED `tests/integration/schema-types.test.ts`: regenerate schema to a temp file from `TEST_DATABASE_URL`, normalize CRLF→LF, compare vs committed `schema.d.ts`, fail naming `npm run db:types`
+- [x] 3.10 GREEN: confirm 3.9 passes against 3.2's committed file
+- [x] 3.11 Create `adrs/0042-capa-de-acceso-a-datos.md`: append-only ADR for Kysely + trigger-over-CHECK (P1) + codegen gate (P2)
+- [x] 3.12 `TECH-DESIGN.md` decisions table (~line 99): add ADR-0042 row
+- [x] 3.13 `TECH-DESIGN.md`: new "Resolución de vigencias" `- [ ]` criteria block — greatest-`vigente_desde`-≤-today algorithm, `sin_vigencia`/union case (Spanish)
 
 ## Phase 4: Verification
 
-- [ ] 4.1 `npm run test:unit` — Phase 1 green, no DB
-- [ ] 4.2 `npm test` — full suite green (migrations, http-pipeline, trpc, routes, transport, dia-operativo, vigencia, schema-types)
-- [ ] 4.3 `npm run typecheck` — bigint arithmetic and `Kysely<DB>` context compile clean
+- [x] 4.1 `npm run test:unit` — Phase 1 green, no DB
+- [x] 4.2 `npm test` — full suite green (migrations, http-pipeline, trpc, routes, transport, dia-operativo, vigencia, schema-types)
+- [x] 4.3 `npm run typecheck` — bigint arithmetic and `Kysely<DB>` context compile clean
