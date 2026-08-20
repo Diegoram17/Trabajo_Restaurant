@@ -1,6 +1,6 @@
 change: app-skeleton-base-schema
 backlog_item: 1
-phase: design
+phase: tasks
 artifact_store: hybrid
 execution_mode: interactive
 delivery_strategy: ask-on-risk
@@ -10,12 +10,20 @@ artifacts:
   proposal: true
   specs: true
   design: true
-  tasks: false
+  tasks: true
 decisions_resolved:
   - ADR-0038 test runner is Vitest, integration tests against real PostgreSQL
   - ADR-0039 money is integer cents, percentages are integer basis points
   - ADR-0040 domain identifiers stay in Spanish across DB, backend and client
   - ADR-0041 development listens in cleartext on loopback only
+decisions_open:
+  - data-access layer for domain queries (raw pg, query builder or ORM) - phase 0 gate
+  - delivery split, forecast is 1150-1350 lines against a 400-line budget
+review_workload_forecast:
+  estimated_changed_lines: 1150-1350
+  budget_risk: high
+  chained_prs_recommended: true
+  decision_needed_before_apply: true
 tasks_progress:
   completed: []
   pending: []
