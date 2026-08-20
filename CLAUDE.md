@@ -16,6 +16,7 @@ Todo vive en la **raíz**. No mover a `docs/`.
 | `TECH-DESIGN.md` | Modelo de datos, arquitectura, criterios de aceptación | **Manda** en técnica |
 | `adrs/` | Una decisión por archivo, formato MADR | **Manda** en el porqué |
 | `BACKLOG.md` | 30 ítems ordenados por dependencia, uno por ciclo SDD | Plan de trabajo |
+| `PROGRESS.md` | Tablero de avances del pipeline SDD entre agentes | Espejo derivado; engram manda |
 | `SECURITY-REPORT.md` | Pase de seguridad, 10/10 cerrados | Histórico con estado |
 | `REVISION-ADVERSARIAL.md` | Revisión adversarial previa, 6 hallazgos abiertos | Histórico con estado |
 | `CHANGELOG.md` | Siete versiones del producto y qué reemplazó cada una | Histórico |
@@ -155,3 +156,6 @@ Reglas del handoff — aplicarlas siempre, sin que el usuario las repita:
 7. **El checkpoint entre agentes es gate.** Antes de que el siguiente agente arranque su fase, se
    verifica que engram y `openspec/` existan y no diverjan (engram manda). Un artefacto roto no se
    propaga a la fase siguiente.
+8. **`PROGRESS.md` se actualiza en el mismo commit que cierra cada fase** — fase cerrada sin su
+   fila actualizada es fase sin cerrar. Si diverge de engram, gana engram y el tablero se
+   regenera desde ahí.
