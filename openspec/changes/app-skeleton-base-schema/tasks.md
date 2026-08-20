@@ -53,18 +53,27 @@ Chain strategy: pending
 - [x] 1.4 `vite.config.ts`: SPA build root + `test` block (`pool: 'forks'`, `globalSetup: tests/setup/global-setup.ts`)
 - [x] 1.5 `tests/setup/global-setup.ts`: migrates a scratch PostgreSQL DB before the suite runs (ADR-0038)
 
-## Phase 2 — Unit Layer (no DB, no socket) — TDD
+## Phase 2 — Unit Layer (no DB, no socket) — TDD — DONE
 
-- [ ] 2.1 [RED] `tests/unit/env.test.ts` — loader throws at boot when `APP_ORIGIN` is unset
-- [ ] 2.2 [GREEN] `src/server/config/env.ts` — reads `APP_ORIGIN`, throws if missing, no default origin
-- [ ] 2.3 [RED] `tests/unit/origin-guard.test.ts` — matching / foreign / absent / suffix-lookalike origin cases
-- [ ] 2.4 [GREEN] `src/server/http/origin-guard.ts` — exact string equality vs `APP_ORIGIN`, state-changing
+- [x] 2.1 [RED] `tests/unit/env.test.ts` — loader throws at boot when `APP_ORIGIN` is unset
+- [x] 2.2 [GREEN] `src/server/config/env.ts` — reads `APP_ORIGIN`, throws if missing, no default origin
+- [x] 2.3 [RED] `tests/unit/origin-guard.test.ts` — matching / foreign / absent / suffix-lookalike origin cases
+- [x] 2.4 [GREEN] `src/server/http/origin-guard.ts` — exact string equality vs `APP_ORIGIN`, state-changing
   methods only, 403 with no body detail
-- [ ] 2.5 [RED] `tests/unit/static.test.ts` — a path-traversal attempt is rejected, contained to build root
-- [ ] 2.6 [GREEN] `src/server/http/static.ts` — resolves against build root, rejects escapes
-- [ ] 2.7 [RED] `tests/unit/migrate-ordering.test.ts` — `NNNN_name.sql` files sort lexicographically; an
+- [x] 2.5 [RED] `tests/unit/static.test.ts` — a path-traversal attempt is rejected, contained to build root
+- [x] 2.6 [GREEN] `src/server/http/static.ts` — resolves against build root, rejects escapes
+- [x] 2.7 [RED] `tests/unit/migrate-ordering.test.ts` — `NNNN_name.sql` files sort lexicographically; an
   already-recorded filename is skipped (mock file list + mock applied set, no real DB)
-- [ ] 2.8 [GREEN] `scripts/migrate.ts` — ordering/skip logic only (DB execution added in Phase 3)
+- [x] 2.8 [GREEN] `scripts/migrate.ts` — ordering/skip logic only (DB execution added in Phase 3)
+
+**Note (discovered during apply)**: the "Focused test command" cell for Unit 2 in the Suggested Work Units
+table above (`npm test -- tests/unit`) does not actually skip `tests/setup/global-setup.ts` — Vitest's
+`globalSetup` runs once for the whole invocation regardless of which files the path filter selects, so that
+exact command still throws on `TEST_DATABASE_URL is not set` with no PostgreSQL reachable (reproduced; see
+apply-progress). This batch added `vitest.unit.config.ts` (no `globalSetup`, `include:
+['tests/unit/**/*.test.ts']`) and an `npm run test:unit` script as the real focused command for this unit;
+`vite.config.ts` / plain `npm test` is unchanged and remains correct for Phase 3+ once PostgreSQL is
+reachable.
 
 ## Phase 3 — Database Schema (integration, real PostgreSQL) — TDD
 

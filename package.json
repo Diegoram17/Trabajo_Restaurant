@@ -12,6 +12,7 @@
     "build": "vite build && tsc -p tsconfig.server.json",
     "migrate": "tsx scripts/migrate.ts",
     "test": "vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "license": "UNLICENSED",
