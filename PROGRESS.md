@@ -23,7 +23,7 @@ Fases: `propose → spec → design → tasks → apply → verify → archive`.
 |---|---|---|---|---|---|---|
 | 1 | Esqueleto de aplicación y esquema base | `app-skeleton-base-schema` | — | — | cerrado (archivado, en main) | `3ea1d54` |
 | 2 | Núcleo de exactitud | `exactness-core` | — | — | cerrado (archivado, en main) | `76729cc` |
-| 3 | Arranque, administrador y dispositivo | `arranque-admin-dispositivo` | tasks | Claude Code | en curso (planning completo — pendiente chain_strategy antes de apply) | — |
+| 3 | Arranque, administrador y dispositivo | `arranque-admin-dispositivo` | tasks | OpenCode | planning cerrado — listo para apply (6 PR apiladas a main, size:exception en PR1/PR2) | — |
 | 4 | Canal de eventos en vivo | — | — | — | pendiente | — |
 | 5 | Identidad del mesero y sesión | — | — | — | pendiente | — |
 | 6 | Turno y horas efectivas | — | — | — | pendiente | — |

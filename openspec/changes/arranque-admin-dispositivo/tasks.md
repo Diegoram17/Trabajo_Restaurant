@@ -2,11 +2,12 @@
 
 ## Preflight decisions (this session — binding for `sdd-apply`)
 
-- `delivery_strategy: ask-on-risk` — the forecast below confirms risk. Do **not** pick a chain
-  strategy autonomously. The orchestrator asks the user which chain strategy to use before
-  `sdd-apply` starts, and the resolved choice must be written back into this file before apply.
+- `delivery_strategy: ask-on-risk` — the forecast below confirmed risk; the user resolved it as
+  **`size:exception` accepted for PR 1 and PR 2** (no further independent cut exists for either
+  without shipping a candidate that does not compile or test standalone).
 - `review_budget_lines: 400`
-- `chain_strategy: pending` — not yet chosen; see Decision needed below.
+- `chain_strategy: stacked-to-main` — each PR targets the previous PR branch or `main` in sequence,
+  merging as it is approved.
 
 ## Review Workload Forecast
 
@@ -15,14 +16,15 @@
 | Estimated changed lines | ~2,370 total (authored additions+deletions; generated `schema.d.ts` excluded, included in snapshot identity only) |
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
-| Suggested split | PR 1 → PR 2 → PR 3 → PR 4 → PR 5 → PR 6 (6 units, strict dependency order) |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Suggested split | PR 1 → PR 2 → PR 3 → PR 4 → PR 5 → PR 6 (6 units, strict dependency order, `stacked-to-main`) |
+| Delivery strategy | ask-on-risk → resolved: `size:exception` on PR 1 and PR 2 |
+| Chain strategy | `stacked-to-main` |
 
-Decision needed before apply: Yes
+Decision needed before apply: No — resolved by the user (`size:exception` on PR 1/PR 2, chain
+strategy `stacked-to-main`)
 Chained PRs recommended: Yes
-Chain strategy: pending
-400-line budget risk: High
+Chain strategy: stacked-to-main
+400-line budget risk: High (accepted via size:exception on PR 1 and PR 2)
 
 **Slice 2 of the proposal's original 4 (`/admin` access) is split further here**, per proposal
 decision Q10's own suggestion, into PR 2 (pipeline plumbing + verification) and PR 3
