@@ -38,7 +38,7 @@ del proyecto y está diagnosticado dos veces por revisiones independientes: *"no
 propagar lo decidido"*. Ocho de los diez hallazgos de seguridad fueron eso.
 
 **Los criterios de aceptación viven en `TECH-DESIGN.md`**, en checkboxes `- [ ]` por flujo. Son la
-especificación ejecutable del proyecto y hoy son 312.
+especificación ejecutable del proyecto y hoy son 317.
 
 **Cada ítem del backlog es un ciclo de SDD completo**, no el proyecto entero.
 
@@ -59,7 +59,9 @@ actualizarlos.
 Romper cualquiera de estos falla en silencio con un número plausible que no reconcilia.
 
 - **Dinero: enteros en unidad mínima.** Nunca punto flotante. Una sola función de redondeo —al céntimo,
-  medio hacia arriba— y un solo punto de aplicación (ADR-0011, ADR-0032).
+  medio hacia arriba— y un solo punto de aplicación (ADR-0011, ADR-0032). En SQL es `integer`, y los
+  **porcentajes son enteros en puntos básicos** —18% es `1800`—, para que la multiplicación no vuelva a
+  meter un flotante en el camino del dinero (ADR-0039).
 - **El día es el día operativo: arranca a las 05:00 hora de Lima.** Se calcula con `dia_operativo()`,
   nunca se persiste. **Ningún `DATE(timestamp)` suelto es válido** (ADR-0028).
 - **FIFO se ordena por `numero_lote`, jamás por fecha.** `Compra.fecha` es informativa (ADR-0030).
@@ -109,8 +111,15 @@ ADR-0018).
 
 ## Idioma
 
-Documentos, criterios de aceptación e interfaz: **español**. Código, identificadores, comentarios y
-mensajes de commit: **inglés**. Los nombres `warning` / `good` del `DESIGN.md` son nombres de color del
+Documentos, criterios de aceptación e interfaz: **español**. Código, comentarios y mensajes de commit:
+**inglés**.
+
+**Los identificadores del dominio son la excepción, y va en serio: van en español** (ADR-0040). Tablas,
+columnas, campos del contrato tRPC y valores de enumeración se llaman igual en la base, en el backend y
+en el cliente, y **coinciden literalmente con los nombres del `TECH-DESIGN.md`** — `vigente_desde`,
+`numero_lote`, `estado IN (abierta, en_cobro)`. Si el nombre aparece en el `TECH-DESIGN.md` o en un
+criterio de aceptación, va en español; todo lo demás —funciones auxiliares, variables locales, tipos de
+infraestructura— va en inglés. Los nombres `warning` / `good` del `DESIGN.md` son nombres de color del
 design system, no texto de pantalla.
 
 ## Git

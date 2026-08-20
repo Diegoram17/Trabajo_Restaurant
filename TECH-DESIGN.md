@@ -102,6 +102,10 @@ La reanudación tras un corte usa `Last-Event-ID` contra la secuencia del regist
 | [ADR-0035](adrs/0035-el-evento-es-una-senal-y-el-stream-se-filtra-por-rol.md) | El evento es una señal de invalidación, y el stream se filtra por rol | Aceptado, **completa 0031, propaga 0013, precisa 0009** |
 | [ADR-0036](adrs/0036-el-hash-de-cada-secreto-lo-decide-su-entropia.md) | El hash de cada secreto lo decide su entropía, y el token tiene ciclo de vida | Aceptado, **completa 0031** |
 | [ADR-0037](adrs/0037-alojamiento-y-origen-unico.md) | El sistema corre alojado y con un solo origen | Aceptado, **reemplaza la sección 1 de 0033**, da piso a 0008, precisa 0015 |
+| [ADR-0038](adrs/0038-runner-de-pruebas.md) | Vitest, y las pruebas que importan corren contra PostgreSQL real | Aceptado, **completa 0002 y 0003** |
+| [ADR-0039](adrs/0039-tipos-sql-del-dinero-y-los-porcentajes.md) | El dinero es `integer` y los porcentajes son puntos básicos | Aceptado, **completa 0011 y 0032** |
+| [ADR-0040](adrs/0040-idioma-de-los-identificadores.md) | Los identificadores del dominio van en español | Aceptado, **precisa la regla de idioma**, apoya 0002 |
+| [ADR-0041](adrs/0041-transporte-en-desarrollo-local.md) | En desarrollo el proceso escucha en claro, atado a loopback | Aceptado, **precisa 0037** |
 
 ## Modelo de datos
 
@@ -413,6 +417,14 @@ falla en silencio con un número plausible que no reconcilia. Vive en un solo lu
 - [ ] El proceso del backend **no expone ningún puerto en claro a ninguna red**. Recibe tráfico ya descifrado desde el borde de la plataforma, y el origen público **rechaza** —no redirige— toda petición sin cifrar.
 - [ ] Tras un período de inactividad que duerma la instancia o la base, **la reconexión del stream con `Last-Event-ID` recupera los eventos perdidos** sin intervención manual y sin dejar una pantalla mostrando estado viejo (ADR-0009).
 - [ ] Una caída del enlace a internet **se comporta exactamente como el corte de red de ADR-0015**: la estación avisa y bloquea el envío, y ninguna comanda queda a medias ni se pierde en silencio.
+
+**Tipos, idioma de los identificadores y transporte en desarrollo (ADR-0038 a ADR-0041)**
+
+- [ ] Los importes se guardan como **`integer` en céntimos** y los porcentajes como **enteros en puntos básicos** (18% es `1800`). Ninguna columna de dinero ni de porcentaje es de punto flotante (ADR-0039).
+- [ ] Aplicar un porcentaje **no introduce un segundo redondeo**: la división por 10 000 ocurre **dentro** de la única función de redondeo, en su único punto de aplicación (ADR-0032, ADR-0039).
+- [ ] Los identificadores del dominio —tablas, columnas, campos del contrato tRPC y valores de enumeración— son **idénticos en base, backend y cliente**, y coinciden **literalmente** con los nombres de este documento (ADR-0040).
+- [ ] Las pruebas que ejercen **concurrencia, FIFO o dinero corren contra PostgreSQL real**, nunca contra un doble: un bloqueo de fila no se puede simular, y una prueba contra un mock prueba el mock (ADR-0003, ADR-0038).
+- [ ] En desarrollo el proceso **escucha solo en `127.0.0.1`**. Un bind a `0.0.0.0` es un defecto, no una comodidad: expone en claro las credenciales de las tres capas en cualquier red donde esté la máquina (ADR-0041).
 
 **Ancla del límite de intentos y qué exige dispositivo (ADR-0034)**
 
