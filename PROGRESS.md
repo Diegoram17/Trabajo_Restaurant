@@ -23,7 +23,7 @@ Fases: `propose → spec → design → tasks → apply → verify → archive`.
 |---|---|---|---|---|---|---|
 | 1 | Esqueleto de aplicación y esquema base | `app-skeleton-base-schema` | — | — | cerrado (archivado, en main) | `3ea1d54` |
 | 2 | Núcleo de exactitud | `exactness-core` | — | — | cerrado (archivado, en main) | `76729cc` |
-| 3 | Arranque, administrador y dispositivo | `arranque-admin-dispositivo` | apply | OpenCode | apply en curso — PR1 (`persona`, primitivas Argon2id/token, seed) y PR2 (pipeline de acceso: cookies `__Host-*`, IP de cliente, verificación de dispositivo/sesión, `resolverAcceso`, contexto tRPC) aplicados y fusionados a `main` con `size:exception`; PR3 (login + bloqueo) pendiente, arranca la próxima fase de apply | `9c9c8de` (PR1), este commit (PR2) |
+| 3 | Arranque, administrador y dispositivo | `arranque-admin-dispositivo` | apply | OpenCode | apply en curso — PR1 (`persona`, primitivas Argon2id/token, seed) y PR2 (pipeline de acceso: cookies `__Host-*`, IP de cliente, verificación de dispositivo/sesión, `resolverAcceso`, contexto tRPC) aplicados y fusionados a `main` con `size:exception`; PR3 (login + bloqueo) pendiente, arranca la próxima fase de apply | `9c9c8de` (PR1), `78d43db` (PR2) |
 | 4 | Canal de eventos en vivo | — | — | — | pendiente | — |
 | 5 | Identidad del mesero y sesión | — | — | — | pendiente | — |
 | 6 | Turno y horas efectivas | — | — | — | pendiente | — |
