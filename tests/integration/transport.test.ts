@@ -53,7 +53,7 @@ describe('Transport (design: The "No Cleartext Port" Integration Test)', () => {
 
     const buildRoot = mkdtempSync(path.join(tmpdir(), 'app-skeleton-transport-'));
     writeFileSync(path.join(buildRoot, 'index.html'), '<!doctype html><html><body>SPA entry</body></html>');
-    server = createServer({ appOrigin: APP_ORIGIN, buildRoot, db });
+    server = createServer({ appOrigin: APP_ORIGIN, buildRoot, db, hops: 1 });
     await new Promise<void>((resolve) => server.listen(0, DEFAULT_BIND_HOST, () => resolve()));
     const address = server.address() as AddressInfo;
     port = address.port;

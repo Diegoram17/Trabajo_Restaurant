@@ -7,7 +7,12 @@
 
 export interface EnvConfig {
   appOrigin: string;
+  /** Position, from the right, of the trusted-edge hop in `X-Forwarded-For`
+   *  (design "Trusted Client IP Resolution", `src/server/auth/ip-cliente.ts`). */
+  trustedProxyHops: number;
 }
+
+const TRUSTED_PROXY_HOPS_POR_DEFECTO = 1;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): EnvConfig {
   const appOrigin = source.APP_ORIGIN;
@@ -16,7 +21,17 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): EnvConfig {
       'APP_ORIGIN environment variable is required and has no default. Set it to the exact scheme+host+port the server is served from.',
     );
   }
-  return { appOrigin };
+
+  const trustedProxyHopsRaw = source.TRUSTED_PROXY_HOPS;
+  let trustedProxyHops = TRUSTED_PROXY_HOPS_POR_DEFECTO;
+  if (trustedProxyHopsRaw !== undefined && trustedProxyHopsRaw !== '') {
+    if (!/^\d+$/.test(trustedProxyHopsRaw)) {
+      throw new Error('TRUSTED_PROXY_HOPS must be a non-negative integer when set.');
+    }
+    trustedProxyHops = Number(trustedProxyHopsRaw);
+  }
+
+  return { appOrigin, trustedProxyHops };
 }
 
 /**

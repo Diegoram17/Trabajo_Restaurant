@@ -30,7 +30,7 @@ describe('tRPC transport (spec: End-to-End Typed tRPC)', () => {
 
     const buildRoot = mkdtempSync(path.join(tmpdir(), 'app-skeleton-trpc-'));
     writeFileSync(path.join(buildRoot, 'index.html'), '<!doctype html><html><body>SPA entry</body></html>');
-    server = createServer({ appOrigin: APP_ORIGIN, buildRoot, db });
+    server = createServer({ appOrigin: APP_ORIGIN, buildRoot, db, hops: 1 });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
     const { port } = server.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}`;

@@ -39,6 +39,9 @@ export interface ServerConfig {
   appOrigin: string;
   buildRoot: string;
   db: Kysely<DB>;
+  /** `TRUSTED_PROXY_HOPS` (`loadEnv`), threaded into `createContextFactory`
+   *  -> `resolverAcceso` -> `resolveClientIp` (design 2.13). */
+  hops: number;
 }
 
 /**
@@ -155,8 +158,8 @@ async function handleRequest(
  * Pure factory — no side effect until `.listen()` is called — so tests can
  * spin up a real server on an ephemeral port against a fixture `buildRoot`.
  */
-export function createServer({ appOrigin, buildRoot, db }: ServerConfig): Server {
-  const createContext = createContextFactory(db);
+export function createServer({ appOrigin, buildRoot, db, hops }: ServerConfig): Server {
+  const createContext = createContextFactory(db, hops);
   return createHttpServer((req, res) => {
     handleRequest(req, res, appOrigin, buildRoot, createContext).catch((error: unknown) => {
       console.error(error);
@@ -170,12 +173,12 @@ export function createServer({ appOrigin, buildRoot, db }: ServerConfig): Server
 
 async function main(): Promise<void> {
   loadDotEnv();
-  const { appOrigin } = loadEnv();
+  const { appOrigin, trustedProxyHops } = loadEnv();
   const buildRoot = fileURLToPath(new URL('../../dist/client', import.meta.url));
   const port = Number(process.env.PORT ?? 3000);
 
   const db = createDb(createPool());
-  const server = createServer({ appOrigin, buildRoot, db });
+  const server = createServer({ appOrigin, buildRoot, db, hops: trustedProxyHops });
   server.listen(port, DEFAULT_BIND_HOST, () => {
     console.log(`Listening on http://${DEFAULT_BIND_HOST}:${port}`);
   });

@@ -30,7 +30,7 @@ describe('SPA route shells (ADR-0001: exactly /estacion, /kds, /cocina, /admin)'
     db = createDb(createPool(process.env.TEST_DATABASE_URL));
 
     const buildRoot = fileURLToPath(new URL('../../dist/client', import.meta.url));
-    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot, db });
+    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot, db, hops: 1 });
     await new Promise<void>((resolve) => {
       server.listen(0, '127.0.0.1', () => resolve());
     });

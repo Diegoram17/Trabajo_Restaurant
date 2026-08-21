@@ -67,21 +67,21 @@ diff (not offered here because no further independent cut exists).
 
 ## Phase 2: Access pipeline â€” cookies, client IP, device verify, session verify (PR 2)
 
-- [ ] 2.1 RED `tests/unit/ip-cliente.test.ts`: rightmost-of-`hops`; absent header â†’ `socket.remoteAddress`; `::ffff:` normalisation; `hops` > list length â†’ `IP_DESCONOCIDA`; spoofed leftmost entry ignored â€” the threat-matrix RED tests for the `X-Forwarded-For` trust boundary
-- [ ] 2.2 GREEN `src/server/auth/ip-cliente.ts`: `resolveClientIp(req, hops)`, `IP_DESCONOCIDA` â€” fails closed, never uncounted
-- [ ] 2.3 RED `tests/unit/cookies.test.ts`: literal `__Host-sesion`/`__Host-dispositivo` strings with correct `Secure`/`HttpOnly`/`SameSite`/`Path=/`, no `Domain`; `agregarSetCookie` appends to an existing header instead of overwriting it
-- [ ] 2.4 GREEN `src/server/auth/cookies.ts`: `leerCookies`, `agregarSetCookie`, `COOKIE_SESION`, `COOKIE_DISPOSITIVO`
-- [ ] 2.5 `package.json`: add `cookie` dependency
-- [ ] 2.6 RED `tests/integration/dispositivo-verificar.test.ts`: `ausente`/`invalido`/`vencido`/`revocado` classification; renewal at <89d remaining life, no write at â‰¥89d; at-most-once-per-day; verification cost well under 50ms â€” fixtures inserted via direct SQL (no `enrolarDispositivo` yet)
-- [ ] 2.7 GREEN `src/server/auth/dispositivo.ts`: `ResultadoDispositivo` type + `verificarDispositivo(db, cookie, ahora?)` only â€” the rest of this module lands in Phase 5
-- [ ] 2.8 RED `tests/integration/sesion-admin-verificar.test.ts`: `ResultadoSesion` mirrors `ResultadoDispositivo`'s shape (D3-C, same `{id}.{token}` construction); session valid + `ultima_actividad_en` advances at T+59min; expired at T+61min; write throttled to â‰¤1/min
-- [ ] 2.9 GREEN `src/server/auth/sesion-admin.ts`: `crearSesionAdmin`, `verificarSesionAdmin`, `revocarSesionesDePersona`
-- [ ] 2.10 Modify `src/server/config/env.ts`: `TRUSTED_PROXY_HOPS` (default `1`, validated integer â‰¥ 0)
-- [ ] 2.11 GREEN `src/server/auth/acceso.ts`: `resolverAcceso(db, req, res, hops, ahora?)` composing 2.2/2.4/2.7/2.9 into one `Context`
-- [ ] 2.12 Modify `src/server/trpc/context.ts`: `Context { db, ip, dispositivo, sesion, cookies }`; `createContextFactory(db, hops)` becomes async, delegates to `resolverAcceso`
-- [ ] 2.13 Modify `src/server/index.ts`: thread `hops` from `loadEnv()` into `ServerConfig`/`createContextFactory` â€” no change to the 5-step pipeline order (D3-K: `resolverAcceso` is one function, reused later by #4's SSE `GET`)
-- [ ] 2.14 Modify `src/server/trpc/router.ts`: `adminProcedure = t.procedure.use(...)` rejecting unless `ctx.sesion.estado === 'valido'` â€” the D3-F rotation gate is not added yet, that's Phase 4
-- [ ] 2.15 Modify `tests/integration/{http-pipeline,trpc,routes,transport}.test.ts`: pass `hops` where the new `createContextFactory` signature requires it (mirrors the pattern used when `db` was threaded in for item #2)
+- [x] 2.1 RED `tests/unit/ip-cliente.test.ts`: rightmost-of-`hops`; absent header â†’ `socket.remoteAddress`; `::ffff:` normalisation; `hops` > list length â†’ `IP_DESCONOCIDA`; spoofed leftmost entry ignored â€” the threat-matrix RED tests for the `X-Forwarded-For` trust boundary
+- [x] 2.2 GREEN `src/server/auth/ip-cliente.ts`: `resolveClientIp(req, hops)`, `IP_DESCONOCIDA` â€” fails closed, never uncounted
+- [x] 2.3 RED `tests/unit/cookies.test.ts`: literal `__Host-sesion`/`__Host-dispositivo` strings with correct `Secure`/`HttpOnly`/`SameSite`/`Path=/`, no `Domain`; `agregarSetCookie` appends to an existing header instead of overwriting it
+- [x] 2.4 GREEN `src/server/auth/cookies.ts`: `leerCookies`, `agregarSetCookie`, `COOKIE_SESION`, `COOKIE_DISPOSITIVO`
+- [x] 2.5 `package.json`: add `cookie` dependency
+- [x] 2.6 RED `tests/integration/dispositivo-verificar.test.ts`: `ausente`/`invalido`/`vencido`/`revocado` classification; renewal at <89d remaining life, no write at â‰¥89d; at-most-once-per-day; verification cost well under 50ms â€” fixtures inserted via direct SQL (no `enrolarDispositivo` yet)
+- [x] 2.7 GREEN `src/server/auth/dispositivo.ts`: `ResultadoDispositivo` type + `verificarDispositivo(db, cookie, ahora?)` only â€” the rest of this module lands in Phase 5
+- [x] 2.8 RED `tests/integration/sesion-admin-verificar.test.ts`: `ResultadoSesion` mirrors `ResultadoDispositivo`'s shape (D3-C, same `{id}.{token}` construction); session valid + `ultima_actividad_en` advances at T+59min; expired at T+61min; write throttled to â‰¤1/min
+- [x] 2.9 GREEN `src/server/auth/sesion-admin.ts`: `crearSesionAdmin`, `verificarSesionAdmin`, `revocarSesionesDePersona`
+- [x] 2.10 Modify `src/server/config/env.ts`: `TRUSTED_PROXY_HOPS` (default `1`, validated integer â‰¥ 0)
+- [x] 2.11 GREEN `src/server/auth/acceso.ts`: `resolverAcceso(db, req, res, hops, ahora?)` composing 2.2/2.4/2.7/2.9 into one `Context`
+- [x] 2.12 Modify `src/server/trpc/context.ts`: `Context { db, ip, dispositivo, sesion, cookies }`; `createContextFactory(db, hops)` becomes async, delegates to `resolverAcceso`
+- [x] 2.13 Modify `src/server/index.ts`: thread `hops` from `loadEnv()` into `ServerConfig`/`createContextFactory` â€” no change to the 5-step pipeline order (D3-K: `resolverAcceso` is one function, reused later by #4's SSE `GET`)
+- [x] 2.14 Modify `src/server/trpc/router.ts`: `adminProcedure = t.procedure.use(...)` rejecting unless `ctx.sesion.estado === 'valido'` â€” the D3-F rotation gate is not added yet, that's Phase 4
+- [x] 2.15 Modify `tests/integration/{http-pipeline,trpc,routes,transport}.test.ts`: pass `hops` where the new `createContextFactory` signature requires it (mirrors the pattern used when `db` was threaded in for item #2)
 
 ## Phase 3: `/admin` login + persisted lockout ladder (PR 3)
 

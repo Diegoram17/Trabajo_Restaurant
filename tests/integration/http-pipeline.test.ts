@@ -32,7 +32,7 @@ describe('HTTP pipeline (design: Runtime Shape)', () => {
     mkdirSync(path.join(buildRoot, 'assets'));
     writeFileSync(path.join(buildRoot, 'assets', 'app.abc123.js'), 'export {};');
 
-    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot, db });
+    server = createServer({ appOrigin: 'http://127.0.0.1:3000', buildRoot, db, hops: 1 });
     await new Promise<void>((resolve) => {
       server.listen(0, '127.0.0.1', () => resolve());
     });
