@@ -11,6 +11,15 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface BloqueoAcceso {
+  ancla: string;
+  bloqueado_hasta: Timestamp | null;
+  bloqueos_consecutivos: number;
+  fallos_consecutivos: number;
+  ultimo_fallo_en: Timestamp;
+  valor_ancla: string;
+}
+
 export interface CalendarioApertura {
   abre_domingo: boolean;
   abre_jueves: boolean;
@@ -50,15 +59,52 @@ export interface ConfiguracionOperativa {
   umbral_demora_min: number;
 }
 
+export interface Dispositivo {
+  enrolado_en: Generated<Timestamp>;
+  expira_en: Timestamp;
+  id: Generated<number>;
+  nombre: string;
+  revocado_en: Timestamp | null;
+  rol: string;
+  rotado_en: Timestamp | null;
+  token_hash: Buffer;
+  token_sal: Buffer;
+}
+
+export interface Persona {
+  activo: boolean;
+  contrasena_hash: string | null;
+  creada_en: Generated<Timestamp>;
+  debe_rotar_contrasena: boolean;
+  id: Generated<number>;
+  nombre: string;
+  rol: string;
+  usuario: string | null;
+}
+
 export interface SchemaMigrations {
   aplicada_en: Generated<Timestamp>;
   nombre: string;
 }
 
+export interface SesionAdmin {
+  creada_en: Generated<Timestamp>;
+  id: string;
+  persona_id: number;
+  revocada_en: Timestamp | null;
+  token_hash: Buffer;
+  token_sal: Buffer;
+  ultima_actividad_en: Generated<Timestamp>;
+}
+
 export interface DB {
+  bloqueo_acceso: BloqueoAcceso;
   calendario_apertura: CalendarioApertura;
   calendario_apertura_excepcion: CalendarioAperturaExcepcion;
   configuracion_costos: ConfiguracionCostos;
   configuracion_operativa: ConfiguracionOperativa;
+  dispositivo: Dispositivo;
+  persona: Persona;
   schema_migrations: SchemaMigrations;
+  sesion_admin: SesionAdmin;
 }

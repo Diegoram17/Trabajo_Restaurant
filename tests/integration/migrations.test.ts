@@ -16,6 +16,10 @@ describe('migrations: base configuration schema', () => {
     'calendario_apertura',
     'calendario_apertura_excepcion',
     'configuracion_operativa',
+    'persona',
+    'dispositivo',
+    'sesion_admin',
+    'bloqueo_acceso',
   ] as const;
 
   beforeAll(async () => {
@@ -29,10 +33,15 @@ describe('migrations: base configuration schema', () => {
     // (CASCADE takes their triggers with them) or a second run of this
     // suite finds them still on disk and 0002's `CREATE FUNCTION` fails
     // with "already exists" instead of genuinely re-applying from scratch.
+    // Since 0003_acceso.sql, the access tables are dropped too — CASCADE
+    // also removes the two creada_por foreign keys pointing at persona.
     await pool.query(
       `DROP FUNCTION IF EXISTS vigencia_no_retroactiva() CASCADE;
        DROP FUNCTION IF EXISTS dia_operativo(timestamptz) CASCADE;
-       DROP TABLE IF EXISTS calendario_apertura_excepcion, calendario_apertura, configuracion_costos, configuracion_operativa, schema_migrations CASCADE`,
+       DROP TABLE IF EXISTS
+         calendario_apertura_excepcion, calendario_apertura, configuracion_costos,
+         configuracion_operativa, dispositivo, sesion_admin, bloqueo_acceso,
+         persona, schema_migrations CASCADE`,
     );
   });
 
@@ -40,9 +49,27 @@ describe('migrations: base configuration schema', () => {
     await pool.end();
   });
 
+  /** Inserts a persona row and returns its id — creada_por has pointed at
+   *  `persona` (with a real FK) since 0003_acceso.sql. */
+  async function idPersona(): Promise<number> {
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO persona (nombre, rol, debe_rotar_contrasena, activo)
+       VALUES ('Fixture migraciones', 'mesero', false, true) RETURNING id`,
+    );
+    const id = rows[0]?.id;
+    if (id === undefined) {
+      throw new Error('persona fixture insert returned no id');
+    }
+    return id;
+  }
+
   it('(a) applies every migration against a clean database: tables exist, 0 rows each', async () => {
     const applied = await runMigrations(pool);
-    expect(applied).toEqual(['0001_configuracion.sql', '0002_dia_operativo_y_vigencia.sql']);
+    expect(applied).toEqual([
+      '0001_configuracion.sql',
+      '0002_dia_operativo_y_vigencia.sql',
+      '0003_acceso.sql',
+    ]);
 
     for (const table of TABLES) {
       const { rows } = await pool.query(`SELECT count(*)::int AS count FROM ${table}`);
@@ -67,12 +94,13 @@ describe('migrations: base configuration schema', () => {
   });
 
   it('(c) rejects a fractional value in a money column as a type mismatch', async () => {
+    const creadaPor = await idPersona();
     await expect(
       pool.query(
         `INSERT INTO configuracion_costos
           (vigente_desde, salario_cocina, salario_administrativo, costos_indirectos_mensuales, pct_comision, pct_merma, pct_igv, creada_por)
-         VALUES (now(), $1, 200000, 500000, 500, 200, 1800, 1)`,
-        [150000.5],
+         VALUES (now(), $1, 200000, 500000, 500, 200, 1800, $2)`,
+        [150000.5, creadaPor],
       ),
     ).rejects.toThrow(/invalid input syntax for type integer/);
   });

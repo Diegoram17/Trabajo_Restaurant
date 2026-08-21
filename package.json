@@ -13,12 +13,14 @@
     "start": "node dist/server/index.js",
     "migrate": "tsx scripts/migrate.ts",
     "db:types": "kysely-codegen --dialect postgres --out-file src/server/db/schema.d.ts",
+    "db:seed": "tsx scripts/seed.ts",
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "license": "UNLICENSED",
   "dependencies": {
+    "@node-rs/argon2": "^2.1.0",
     "@tanstack/react-query": "^5.101.4",
     "@trpc/client": "^11.18.0",
     "@trpc/react-query": "^11.18.0",
